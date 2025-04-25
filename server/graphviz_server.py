@@ -2,6 +2,7 @@
 from mcp.server.fastmcp import FastMCP, Image, Context
 import graphviz
 from PIL import Image as PILImage
+import sys
 
 mcp = FastMCP("Graphviz")
 
@@ -22,7 +23,10 @@ async def create_graphviz_graph(graph_name: str, ctx: Context) -> str:
     if graph_name in graphs:
         return f"Graph '{graph_name}' already exists."
 
+    print(f"Current Graph {graphs}", file=sys.stderr)
     graphs[graph_name] = graphviz.Digraph(name=graph_name)
+    print(f"Graph '{graph_name}' created. {graphs}", file=sys.stderr)
+
     await ctx.info(f"Graph '{graph_name}' created.")
     return f"Graph '{graph_name}' created successfully."
 
@@ -36,6 +40,7 @@ async def list_all_graphs(ctx: Context) -> str:
     """
     if not graphs:
         return "No graphs available."
+    # print(f"{", ".join(graphs.keys())}", file=sys.stderr)
     await ctx.info(", ".join(graphs.keys()))
     return ", ".join(graphs.keys())
 
@@ -95,6 +100,11 @@ def update_graph_image(graph_name: str) -> str:
 
     return f"Done! Check the output at {output_path}"
 
+@mcp.tool()
+def display_graph() -> Image:
+    """Load an image from disk"""
+    return Image(path='/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/test2.gv.png')
+
 if __name__ == "__main__":
     print("Starting Graphviz server...")
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")

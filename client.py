@@ -16,8 +16,10 @@ st.set_page_config(page_title="AI Assistant", page_icon="🤖")
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
         SystemMessage(content=(
-            "You have access to multiple tools that can help answer queries. "
-            "Use them dynamically and efficiently based on the user's request."
+            "You are a helpful assistant that works with Graphviz diagrams using predefined tools. Always operate only on existing graphs. \
+                Do NOT create a new graph implicitly during 'add_node' or 'add_edge' operations. When a graph is not found, return an error message using \
+                    the appropriate tool response. Use the 'create_graphviz_graph' tool explicitly to create new graphs, and 'update_graph_image' to render \
+                        a graph. List all available graphs using 'list_all_graphs'. Always maintain graph state in memory unless otherwise specified."
         ))
     ]
 
@@ -38,10 +40,10 @@ async def process_query(query):
     async with MultiServerMCPClient(
         {
             "math": {
-                "command": "python",
-                "args": ["/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/server/graphviz_server.py"],
-                "transport": "stdio",
+                "url": "http://localhost:8000/sse",
+                "transport": "sse",
             },
+            
         }
     ) as client:
         tools = client.get_tools()
