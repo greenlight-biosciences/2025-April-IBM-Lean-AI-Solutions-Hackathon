@@ -16,6 +16,24 @@ def list_resources() -> list:
         for uri, entry in resource_registry.items()
     ]
 def get_resource(uri: str) -> dict:
+    """
+    Retrieves a resource from the resource registry based on its URI.
+    This function looks up the provided URI in the resource registry and 
+    returns the resource's metadata and content in a structured format. 
+    If the resource is not found, an exception is raised.
+    Args:
+        uri (str): The unique identifier (URI) of the resource to retrieve.
+    Returns:
+        dict: A dictionary containing the resource's type, URI, MIME type, 
+              and content bytes.
+    Raises:
+        Exception: If the resource with the specified URI is not found.
+    Description:
+        This tool is designed to fetch resources from a predefined registry 
+        and return them in a format compatible with the embedded resource 
+        MCP (Media Content Protocol). It ensures that the resource's metadata 
+        and content are properly structured for further processing.
+    """
     entry = resource_registry.get(uri)
     if not entry:
         raise Exception("Resource not found")
@@ -131,6 +149,22 @@ def update_graph_image(graph_name: str) -> str:
 
 @mcp.tool()
 def display_graph(resource_uri: str) -> dict:
+    """
+    Displays a graph image based on the provided resource URI.
+
+    This tool retrieves a graph resource from the resource registry using the given URI 
+    and returns it as an image in JPEG format. If the resource is not found, an exception 
+    is raised.
+
+    Args:
+        resource_uri (str): The URI of the resource to retrieve.
+
+    Returns:
+        dict: A dictionary containing the image data in JPEG format.
+
+    Raises:
+        Exception: If the resource is not found in the registry.
+    """
     entry = resource_registry.get(resource_uri)
     if not entry:
         raise Exception("Resource not found")
