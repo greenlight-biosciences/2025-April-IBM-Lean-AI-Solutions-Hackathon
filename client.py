@@ -1,13 +1,12 @@
 import os
 import asyncio
 from langchain_openai import AzureChatOpenAI
+from langchain_ibm import ChatWatsonx
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.client import MultiServerMCPClient, load_mcp_resources
 from langgraph.prebuilt import create_react_agent
 from dotenv import load_dotenv
 import streamlit as st
-from langchain_ibm import ChatWatsonx
-
 
 load_dotenv()
 
@@ -55,7 +54,7 @@ lc_llm = AzureChatOpenAI(
 async def process_query(query):
     async with MultiServerMCPClient(
         {
-            "math": {
+            "Graphviz": {
                 "url": "http://localhost:8000/sse",
                 "transport": "sse",
             },
@@ -66,9 +65,9 @@ async def process_query(query):
         agent = create_react_agent(lc_llm, tools)
 
         st.session_state.chat_history.append(HumanMessage(content=query))
-        response = agent.invoke({"messages": st.session_state.chat_history})
+        response = await agent.ainvoke({"messages": st.session_state.chat_history})
         ai_message = response["messages"][-1]
-        print(f"Assistant: {ai_message}")
+        # print(ai_message)
         st.session_state.chat_history.append(ai_message)
 
         return ai_message.content
@@ -152,7 +151,7 @@ if os.path.exists("/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/
 #             query = input("Query: ")
 #             if query.lower() in ("exit", "quit"):
 #                 break
-            
+
 #             chat_history.append(HumanMessage(content=query))
 #             response = await agent.ainvoke({"messages": chat_history})
 
