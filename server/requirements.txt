@@ -12,3 +12,9 @@ Pillow
 # your web framework, e.g. FastAPI + Uvicorn
 fastapi
 uvicorn
+
+# Additional dependencies based on imports
+requests
+scikit-build
+tk
+tkfontawesome
