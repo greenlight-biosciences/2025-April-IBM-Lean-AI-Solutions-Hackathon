@@ -141,7 +141,7 @@ def render_graph_image(graph_name: str) -> str:
     output_path = graphs[graph_name].render(format='png', cleanup=True)
     image_bytes = buffer.getvalue()
 
-    resource_uri = f"resource://graph_image/{output_path}"
+    resource_uri = f"resource://graph_images/{output_path}"
     resource_registry[resource_uri] = {
         "filepath": output_path,
         "mimeType": "image/jpeg",
