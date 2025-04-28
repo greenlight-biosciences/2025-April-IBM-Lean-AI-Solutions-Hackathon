@@ -9,6 +9,7 @@ mcp = FastMCP("Graphviz")
 # In-memory store for graphs
 graphs = {}
 resource_registry  = {}
+
 @mcp.tool()
 def list_resources() -> list:
     return [
@@ -140,7 +141,7 @@ def render_graph_image(graph_name: str) -> str:
     output_path = graphs[graph_name].render(format='png', cleanup=True)
     image_bytes = buffer.getvalue()
 
-    resource_uri = f"resource://screenshot/{output_path}"
+    resource_uri = f"resource://graph_image/{output_path}"
     resource_registry[resource_uri] = {
         "filepath": output_path,
         "mimeType": "image/jpeg",
@@ -186,7 +187,7 @@ def delete_node(graph_name: str, node_name: str) -> str:
     return f"Node '{node_name}' and its edges deleted from graph '{graph_name}'."
 
 
-@mcp.tool()
+# @mcp.tool()
 def display_graph(resource_uri: str) -> dict:
     """
     Displays a graph image based on the provided resource URI.
@@ -207,6 +208,7 @@ def display_graph(resource_uri: str) -> dict:
     entry = resource_registry.get(resource_uri)
     if not entry:
         raise Exception("Resource not found")
+    print(f"Displaying the graph...", file=sys.stderr)
     return Image(data=entry["bytes"], format="jpeg")
 
 
