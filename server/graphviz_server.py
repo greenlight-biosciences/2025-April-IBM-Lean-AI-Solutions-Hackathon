@@ -3,11 +3,49 @@ from mcp.server.fastmcp import FastMCP, Image, Context
 import graphviz
 from PIL import Image as PILImage
 import sys
-
+import io
 mcp = FastMCP("Graphviz")
 
 # In-memory store for graphs
 graphs = {}
+resource_registry  = {}
+@mcp.tool()
+def list_resources() -> list:
+    return [
+        {"uri": uri, "mimeType": entry["mimeType"], "filepath": entry["filepath"]}
+        for uri, entry in resource_registry.items()
+    ]
+def get_resource(uri: str) -> dict:
+    """
+    Retrieves a resource from the resource registry based on its URI.
+    This function looks up the provided URI in the resource registry and 
+    returns the resource's metadata and content in a structured format. 
+    If the resource is not found, an exception is raised.
+    Args:
+        uri (str): The unique identifier (URI) of the resource to retrieve.
+    Returns:
+        dict: A dictionary containing the resource's type, URI, MIME type, 
+              and content bytes.
+    Raises:
+        Exception: If the resource with the specified URI is not found.
+    Description:
+        This tool is designed to fetch resources from a predefined registry 
+        and return them in a format compatible with the embedded resource 
+        MCP (Media Content Protocol). It ensures that the resource's metadata 
+        and content are properly structured for further processing.
+    """
+    entry = resource_registry.get(uri)
+    if not entry:
+        raise Exception("Resource not found")
+    # You might want to return data in the embedded resource MCP format
+    return {
+        "type": "resource",
+        "resource": {
+            "uri": uri,
+            "mimeType": entry["mimeType"],
+            "bytes": entry["bytes"]
+        }
+    }
 
 @mcp.tool()
 async def create_graphviz_graph(graph_name: str, ctx: Context) -> str:
@@ -96,8 +134,18 @@ def render_graph_image(graph_name: str) -> str:
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
 
+    
     # Render the PNG to a temporary file
+    buffer = io.BytesIO()
     output_path = graphs[graph_name].render(format='png', cleanup=True)
+    image_bytes = buffer.getvalue()
+
+    resource_uri = f"resource://screenshot/{output_path}"
+    resource_registry[resource_uri] = {
+        "filepath": output_path,
+        "mimeType": "image/jpeg",
+        "bytes": image_bytes,
+    }    
     print(f"Rendered graph '{graph_name}' to {output_path}", file=sys.stderr)
     return f"Done! Check the output at {output_path}"
 
@@ -139,31 +187,28 @@ def delete_node(graph_name: str, node_name: str) -> str:
 
 
 @mcp.tool()
-def delete_edge(graph_name: str, from_node: str, to_node: str) -> str:
-    """Delete an edge from the graph."""
-    if graph_name not in graphs:
-        return f"Graph '{graph_name}' does not exist."
+def display_graph(resource_uri: str) -> dict:
+    """
+    Displays a graph image based on the provided resource URI.
 
-    original_graph = graphs[graph_name]
-    new_graph = type(original_graph)(graph_name)
+    This tool retrieves a graph resource from the resource registry using the given URI 
+    and returns it as an image in JPEG format. If the resource is not found, an exception 
+    is raised.
 
-    # Copy graph-level attributes
-    new_graph.attr(**original_graph.graph_attr)
-    new_graph.node_attr.update(original_graph.node_attr)
-    new_graph.edge_attr.update(original_graph.edge_attr)
+    Args:
+        resource_uri (str): The URI of the resource to retrieve.
 
-    # Determine arrow symbol used in the DOT format
-    arrow = "->" if isinstance(original_graph, graphviz.Digraph) else "--"
-    edge_pattern = f"{from_node} {arrow} {to_node}"
+    Returns:
+        dict: A dictionary containing the image data in JPEG format.
 
-    for line in original_graph.body:
-        # Skip the specific edge
-        if edge_pattern in line:
-            continue
-        new_graph.body.append(line)
-    print(f"Deleted edge from {from_node} to {to_node}", file=sys.stderr)
-    graphs[graph_name] = new_graph
-    return f"Edge from '{from_node}' to '{to_node}' deleted from graph '{graph_name}'."
+    Raises:
+        Exception: If the resource is not found in the registry.
+    """
+    entry = resource_registry.get(resource_uri)
+    if not entry:
+        raise Exception("Resource not found")
+    return Image(data=entry["bytes"], format="jpeg")
+
 
 if __name__ == "__main__":
     print("Starting Graphviz server...")
