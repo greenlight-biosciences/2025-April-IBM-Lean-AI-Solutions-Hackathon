@@ -82,7 +82,7 @@ def add_edge(graph_name: str, from_node: str, to_node: str, ctx: Context) -> str
     return f"Edge from '{from_node}' to '{to_node}' added in graph '{graph_name}'."
 
 @mcp.tool()
-def update_graph_image(graph_name: str) -> str:
+def render_graph_image(graph_name: str) -> str:
     """
     Renders the specified graph to a PNG file and returns the file path.
     
@@ -100,10 +100,69 @@ def update_graph_image(graph_name: str) -> str:
 
     return f"Done! Check the output at {output_path}"
 
+# @mcp.tool()
+# def display_graph() -> Image:
+#     """Load an image from disk"""
+#     return Image(path='/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/test2.gv.png')
 @mcp.tool()
-def display_graph() -> Image:
-    """Load an image from disk"""
-    return Image(path='/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/test2.gv.png')
+def create_thumbnail() -> Image:
+    """Create a thumbnail from an image"""
+    img = PILImage.open('/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/test2.gv.png')
+    print(f"Create thumbnail", file=sys.stderr)
+    img.thumbnail((100, 100))
+    print(f"{img}", file=sys.stderr)
+    return Image(data=img.tobytes(), format="png")
+
+@mcp.tool()
+def delete_node(graph_name: str, node_name: str) -> str:
+    """Delete a node and its edges from the graph."""
+    if graph_name not in graphs:
+        return f"Graph '{graph_name}' does not exist."
+
+    original_graph = graphs[graph_name]
+    new_graph = type(original_graph)(graph_name)  # preserve Graph or Digraph
+
+    # Copy graph-level attributes
+    new_graph.attr(**original_graph.graph_attr)
+    new_graph.node_attr.update(original_graph.node_attr)
+    new_graph.edge_attr.update(original_graph.edge_attr)
+
+    for line in original_graph.body:
+        # Skip any node or edge involving the node to be deleted
+        if node_name in line:
+            continue
+        new_graph.body.append(line)
+
+    graphs[graph_name] = new_graph
+    return f"Node '{node_name}' and its edges deleted from graph '{graph_name}'."
+
+
+@mcp.tool()
+def delete_edge(graph_name: str, from_node: str, to_node: str) -> str:
+    """Delete an edge from the graph."""
+    if graph_name not in graphs:
+        return f"Graph '{graph_name}' does not exist."
+
+    original_graph = graphs[graph_name]
+    new_graph = type(original_graph)(graph_name)
+
+    # Copy graph-level attributes
+    new_graph.attr(**original_graph.graph_attr)
+    new_graph.node_attr.update(original_graph.node_attr)
+    new_graph.edge_attr.update(original_graph.edge_attr)
+
+    # Determine arrow symbol used in the DOT format
+    arrow = "->" if isinstance(original_graph, graphviz.Digraph) else "--"
+    edge_pattern = f"{from_node} {arrow} {to_node}"
+
+    for line in original_graph.body:
+        # Skip the specific edge
+        if edge_pattern in line:
+            continue
+        new_graph.body.append(line)
+
+    graphs[graph_name] = new_graph
+    return f"Edge from '{from_node}' to '{to_node}' deleted from graph '{graph_name}'."
 
 if __name__ == "__main__":
     print("Starting Graphviz server...")

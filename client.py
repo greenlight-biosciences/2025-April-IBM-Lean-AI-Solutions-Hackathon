@@ -16,10 +16,7 @@ st.set_page_config(page_title="AI Assistant", page_icon="🤖")
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
         SystemMessage(content=(
-            "You are a helpful assistant that works with Graphviz diagrams using predefined tools. Always operate only on existing graphs. \
-                Do NOT create a new graph implicitly during 'add_node' or 'add_edge' operations. When a graph is not found, return an error message using \
-                    the appropriate tool response. Use the 'create_graphviz_graph' tool explicitly to create new graphs, and 'update_graph_image' to render \
-                        a graph. List all available graphs using 'list_all_graphs'. Always maintain graph state in memory unless otherwise specified."
+            "You are a helpful assistant that works with Graphviz diagrams using predefined tools."
         ))
     ]
 
@@ -52,6 +49,7 @@ async def process_query(query):
         st.session_state.chat_history.append(HumanMessage(content=query))
         response = await agent.ainvoke({"messages": st.session_state.chat_history})
         ai_message = response["messages"][-1]
+        print(f"Assistant: {ai_message}")
         st.session_state.chat_history.append(ai_message)
 
         return ai_message.content
@@ -81,6 +79,11 @@ if user_input:
     st.session_state.messages.append({"role": "assistant", "content": response})
     with st.chat_message("assistant"):
         st.markdown(response)
+
+
+# Display image in the sidebar if it exists
+if os.path.exists("/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/server/test.gv.png"):
+    st.sidebar.image("/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/server/test.gv.png", caption="Graphviz Output", use_container_width=True)
 
 # from langchain_openai import AzureChatOpenAI
 # from langchain_core.messages import HumanMessage, SystemMessage
