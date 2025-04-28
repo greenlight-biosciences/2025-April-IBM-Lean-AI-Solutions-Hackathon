@@ -6,6 +6,8 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 from dotenv import load_dotenv
 import streamlit as st
+from langchain_ibm import ChatWatsonx
+
 
 load_dotenv()
 
@@ -16,7 +18,7 @@ st.set_page_config(page_title="AI Assistant", page_icon="🤖")
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
         SystemMessage(content=(
-            "You are a helpful assistant that works with Graphviz diagrams using predefined tools."
+            "You are a helpful assistant that works with Graphviz diagrams using predefined tools. After every change to the graph, render it out."
         ))
     ]
 
@@ -31,6 +33,23 @@ lc_llm = AzureChatOpenAI(
     openai_api_key=os.environ["AZURE_OPENAI_KEY"],
     openai_api_version=os.environ["AZURE_OPENAI_VERSION"],
 )
+
+
+# WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
+# WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
+
+# lc_llm = ChatWatsonx(
+#     model_id="mistralai/mistral-large",# "ibm/granite-3-8b-instruct",
+#     url = "https://us-south.ml.cloud.ibm.com",
+#     apikey = WATSONX_APIKEY,
+#     project_id = WATSONX_PROJECT_ID,
+#     params = {
+#         "decoding_method": "greedy",
+#         "temperature": 0,
+#         "min_new_tokens": 5,
+#         "max_new_tokens": 100000
+#     }
+# )
 
 # Async query processor
 async def process_query(query):
@@ -47,7 +66,7 @@ async def process_query(query):
         agent = create_react_agent(lc_llm, tools)
 
         st.session_state.chat_history.append(HumanMessage(content=query))
-        response = await agent.ainvoke({"messages": st.session_state.chat_history})
+        response = agent.invoke({"messages": st.session_state.chat_history})
         ai_message = response["messages"][-1]
         print(f"Assistant: {ai_message}")
         st.session_state.chat_history.append(ai_message)
@@ -64,7 +83,7 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 # Chat input bar
-user_input = st.chat_input("Ask me something...")
+user_input = st.chat_input("What can I graph for you?")
 
 if user_input:
     # Display user's message
@@ -115,10 +134,14 @@ if os.path.exists("/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/
 # async def main():
 #     async with MultiServerMCPClient(
 #         {
+#             # "math": {
+#             #     "command": "python",
+#             #     "args": ["/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/server/graphviz_server.py"],
+#             #     "transport": "stdio",
+#             # },
 #             "math": {
-#                 "command": "python",
-#                 "args": ["/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/server/graphviz_server.py"],
-#                 "transport": "stdio",
+#                 "url": "http://localhost:8000/sse",
+#                 "transport": "sse",
 #             },
 #         }
 #     ) as client:
@@ -129,7 +152,7 @@ if os.path.exists("/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/
 #             query = input("Query: ")
 #             if query.lower() in ("exit", "quit"):
 #                 break
-
+            
 #             chat_history.append(HumanMessage(content=query))
 #             response = await agent.ainvoke({"messages": chat_history})
 

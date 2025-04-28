@@ -31,20 +31,6 @@ async def create_graphviz_graph(graph_name: str, ctx: Context) -> str:
     return f"Graph '{graph_name}' created successfully."
 
 @mcp.tool()
-async def list_all_graphs(ctx: Context) -> str:
-    """
-    Returns a list of all graph names stored in memory.
-    
-    Returns:
-        A string containing the names of all graphs.
-    """
-    if not graphs:
-        return "No graphs available."
-    # print(f"{", ".join(graphs.keys())}", file=sys.stderr)
-    await ctx.info(", ".join(graphs.keys()))
-    return ", ".join(graphs.keys())
-
-@mcp.tool()
 async def add_node(graph_name: str, node_name: str, ctx: Context) -> str:
     """
     Adds a node to the specified graph.
@@ -58,9 +44,24 @@ async def add_node(graph_name: str, node_name: str, ctx: Context) -> str:
     """
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
-
+    print(f"Added a node {node_name}", file=sys.stderr)
     graphs[graph_name].node(node_name)
+    await ctx.info(f"Node '{node_name}' added to graph '{graph_name}'.")
     return f"Node '{node_name}' added to graph '{graph_name}'."
+
+@mcp.tool()
+async def list_all_graphs(ctx: Context) -> str:
+    """
+    Returns a list of all graph names stored in memory.
+    
+    Returns:
+        A string containing the names of all graphs.
+    """
+    if not graphs:
+        return "No graphs available."
+    # print(f"{", ".join(graphs.keys())}", file=sys.stderr)
+    await ctx.info(", ".join(graphs.keys()))
+    return ", ".join(graphs.keys())
 
 @mcp.tool()
 def add_edge(graph_name: str, from_node: str, to_node: str, ctx: Context) -> str:
@@ -77,7 +78,7 @@ def add_edge(graph_name: str, from_node: str, to_node: str, ctx: Context) -> str
     """
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
-
+    print(f"Added an edge from {from_node} to {to_node}", file=sys.stderr)
     graphs[graph_name].edge(from_node, to_node)
     return f"Edge from '{from_node}' to '{to_node}' added in graph '{graph_name}'."
 
@@ -97,21 +98,21 @@ def render_graph_image(graph_name: str) -> str:
 
     # Render the PNG to a temporary file
     output_path = graphs[graph_name].render(format='png', cleanup=True)
-
+    print(f"Rendered graph '{graph_name}' to {output_path}", file=sys.stderr)
     return f"Done! Check the output at {output_path}"
 
 # @mcp.tool()
 # def display_graph() -> Image:
 #     """Load an image from disk"""
 #     return Image(path='/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/test2.gv.png')
-@mcp.tool()
-def create_thumbnail() -> Image:
-    """Create a thumbnail from an image"""
-    img = PILImage.open('/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/test2.gv.png')
-    print(f"Create thumbnail", file=sys.stderr)
-    img.thumbnail((100, 100))
-    print(f"{img}", file=sys.stderr)
-    return Image(data=img.tobytes(), format="png")
+# @mcp.tool()
+# def create_thumbnail() -> Image:
+#     """Create a thumbnail from an image"""
+#     img = PILImage.open('/home/mihirkestur/2025-April-IBM-Lean-AI-Solutions-Hackathon/test2.gv.png')
+#     print(f"Create thumbnail", file=sys.stderr)
+#     img.thumbnail((100, 100))
+#     print(f"{img}", file=sys.stderr)
+#     return Image(data=img.tobytes(), format="png")
 
 @mcp.tool()
 def delete_node(graph_name: str, node_name: str) -> str:
@@ -132,7 +133,7 @@ def delete_node(graph_name: str, node_name: str) -> str:
         if node_name in line:
             continue
         new_graph.body.append(line)
-
+    print(f"Deleted node {node_name}", file=sys.stderr)
     graphs[graph_name] = new_graph
     return f"Node '{node_name}' and its edges deleted from graph '{graph_name}'."
 
@@ -160,7 +161,7 @@ def delete_edge(graph_name: str, from_node: str, to_node: str) -> str:
         if edge_pattern in line:
             continue
         new_graph.body.append(line)
-
+    print(f"Deleted edge from {from_node} to {to_node}", file=sys.stderr)
     graphs[graph_name] = new_graph
     return f"Edge from '{from_node}' to '{to_node}' deleted from graph '{graph_name}'."
 
