@@ -1,0 +1,14 @@
+# requirements.txt
+
+# your MCP server library (adjust name/version if needed)
+mcp
+
+# Graphviz Python bindings
+graphviz
+
+# PIL
+Pillow
+
+# your web framework, e.g. FastAPI + Uvicorn
+fastapi
+uvicorn
