@@ -51,13 +51,45 @@ async def get_resource(uri: str) -> dict:
         }
     }
 
+# Example system prompt for drawing a diagram
 @mcp.tool()
-async def create_graphviz_graph(graph_name: str) -> str:
+async def show_example_system_prompt(ctx: Context) -> str:
     """
-    Creates a new Graphviz Digraph object and stores it in memory.
+    Displays an example system prompt to guide the user through the process of creating a diagram.
+
+    Args:
+        ctx: The context object for sending information to the user.
+
+    Returns:
+        A confirmation message indicating that the prompt has been displayed.
+    """
+    example_system_prompt = """
+    Welcome to the Graphviz Diagram Drawing Assistant!
+
+    I will guide you through the process of creating a diagram step by step. Here's how it works:
+    1. You will describe the diagram you want to create, including its purpose and key components.
+    2. I will propose a plan for the diagram, including the blocks/nodes, connections, and layout.
+    3. You will review and confirm the plan before we proceed.
+    4. For each step, I will render and display the graph to show progress.
+    5. At the end, I will render and display the final diagram for your review.
+
+    Let's get started! Please describe the diagram you want to create.
+    """
+    await ctx.info(example_system_prompt)
+    return "Example system prompt displayed to the user."
+
+@mcp.tool()
+async def create_graphviz_graph(graph_name: str, rankdir: str = "TB", bgcolor: str = "white", fontname: str = "Helvetica", fontsize: str = "12") -> str:
+    """
+    Creates a new Graphviz Digraph object with optional styling and stores it in memory.
     
     Args:
         graph_name: The name/identifier for the graph.
+        rankdir: The direction of the graph layout. Options are 'TB' (top to bottom), 
+                 'LR' (left to right), 'BT' (bottom to top), 'RL' (right to left). Defaults to 'TB'.
+        bgcolor: The background color of the graph. Defaults to 'white'.
+        fontname: The font name for the graph labels. Defaults to 'San Francisco'.
+        fontsize: The font size for the graph labels. Defaults to '12'.
     
     Returns:
         A confirmation message.
@@ -65,17 +97,22 @@ async def create_graphviz_graph(graph_name: str) -> str:
     if graph_name in graphs:
         return f"Graph '{graph_name}' already exists."
 
-    graphs[graph_name] = graphviz.Digraph(name=graph_name)
-    return f"Graph '{graph_name}' created successfully."
+    graph = graphviz.Digraph(name=graph_name)
+    graph.attr(rankdir=rankdir, bgcolor=bgcolor, fontname=fontname, fontsize=fontsize)
+    graphs[graph_name] = graph
+    return f"Graph '{graph_name}' created successfully with rankdir='{rankdir}', bgcolor='{bgcolor}', fontname='{fontname}', and fontsize='{fontsize}'."
 
 @mcp.tool()
-async def add_node(graph_name: str, node_name: str) -> str:
+async def add_block(graph_name: str, block_name: str, shape: str = "ellipse", color: str = "black", style: str = "solid") -> str:
     """
-    Adds a node to the specified graph.
+    Adds a styled block or node to the specified graph.
     
     Args:
-        graph_name: The name of the graph to which the node will be added.
-        node_name: The name of the node to be added.
+        graph_name: The name of the graph to which the block will be added.
+        block_name: The name of the block to be added.
+        shape: The shape of the block (e.g., "ellipse", "box", "circle"). Defaults to "ellipse".
+        color: The color of the block. Defaults to "black".
+        style: The style of the block (e.g., "solid", "dashed", "dotted"). Defaults to "solid".
     
     Returns:
         A confirmation message.
@@ -83,8 +120,8 @@ async def add_node(graph_name: str, node_name: str) -> str:
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
 
-    graphs[graph_name].node(node_name)
-    return f"Node '{node_name}' added to graph '{graph_name}'."
+    graphs[graph_name].node(block_name, shape=shape, color=color, style=style)
+    return f"Block '{block_name}' added to graph '{graph_name}' with shape '{shape}', color '{color}', and style '{style}'."
 
 @mcp.tool()
 async def list_all_graph_in_memory() -> str:
@@ -100,15 +137,110 @@ async def list_all_graph_in_memory() -> str:
     return ", ".join(graphs.keys())
 
 @mcp.tool()
-def add_edge(graph_name: str, from_node: str, to_node: str, label: str = None) -> str:
+async def update_block(graph_name: str, block_name: str, shape: str = None, color: str = None, style: str = None, label: str = None) -> str:
     """
-    Adds an edge between two nodes in the specified graph, with an optional label.
+    Updates the attributes of an existing node in the specified graph.
+
+    Args:
+        graph_name: The name of the graph containing the node.
+        block_name: The name of the node to update.
+        shape: The new shape of the node (optional).
+        color: The new color of the node (optional).
+        style: The new style of the node (optional).
+        label: The new label of the node (optional).
+
+    Returns:
+        A confirmation message.
+    """
+    if graph_name not in graphs:
+        return f"Graph '{graph_name}' does not exist."
+
+    graph = graphs[graph_name]
+
+    # Check if the block exists in the graph
+    if block_name not in graph.body:
+        return f"Block '{block_name}' does not exist in graph '{graph_name}'."
+
+    # Update the node attributes
+    attributes = {}
+    if shape:
+        attributes["shape"] = shape
+    if color:
+        attributes["color"] = color
+    if style:
+        attributes["style"] = style
+    if label:
+        attributes["label"] = label
+
+    graph.node(block_name, **attributes)
+    return f"Node '{block_name}' updated in graph '{graph_name}' with attributes: {attributes}."
+@mcp.tool()
+async def update_connection(graph_name: str, from_block: str, to_block: str, label: str = None, color: str = None, style: str = None, penwidth: str = None) -> str:
+    """
+    Updates the attributes of an existing connection in the specified graph.
+
+    Args:
+        graph_name: The name of the graph containing the connection.
+        from_block: The starting block of the connection.
+        to_block: The ending block of the connection.
+        label: The new label for the connection (optional).
+        color: The new color of the connection (optional).
+        style: The new style of the connection (e.g., "solid", "dashed", "dotted") (optional).
+        penwidth: The new width of the connection line (optional).
+
+    Returns:
+        A confirmation message.
+    """
+    if graph_name not in graphs:
+        return f"Graph '{graph_name}' does not exist."
+
+    graph = graphs[graph_name]
+
+    # Recreate the graph without the old connection
+    new_graph = type(graph)(graph_name)
+    new_graph.attr(**graph.graph_attr)
+    new_graph.node_attr.update(graph.node_attr)
+    new_graph.edge_attr.update(graph.edge_attr)
+
+    connection_found = False
+    for line in graph.body:
+        if f"{from_block} -> {to_block}" in line:
+            connection_found = True
+            continue
+        new_graph.body.append(line)
+
+    if not connection_found:
+        return f"Connection from '{from_block}' to '{to_block}' does not exist in graph '{graph_name}'."
+
+    # Add the updated connection
+    connection_attributes = {}
+    if label:
+        connection_attributes["label"] = label
+    if color:
+        connection_attributes["color"] = color
+    if style:
+        connection_attributes["style"] = style
+    if penwidth:
+        connection_attributes["penwidth"] = penwidth
+
+    new_graph.edge(from_block, to_block, **connection_attributes)
+    graphs[graph_name] = new_graph
+
+    return f"Connection from '{from_block}' to '{to_block}' updated in graph '{graph_name}' with attributes: {connection_attributes}."
+
+@mcp.tool()
+def add_connection(graph_name: str, from_block: str, to_block: str, label: str = None, color: str = "black", style: str = "solid", penwidth: str = "1") -> str:
+    """
+    Adds a styled connection between two blocks in the specified graph, with an optional label.
     
     Args:
         graph_name: The name of the graph.
-        from_node: The starting node of the edge.
-        to_node: The ending node of the edge.
-        label: The label for the edge (optional).
+        from_block: The starting block of the connection.
+        to_block: The ending block of the connection.
+        label: The label for the connection (optional).
+        color: The color of the connection. Defaults to "black".
+        style: The style of the connection (e.g., "solid", "dashed", "dotted"). Defaults to "solid".
+        penwidth: The width of the connection line. Defaults to "1".
     
     Returns:
         A confirmation message.
@@ -117,15 +249,15 @@ def add_edge(graph_name: str, from_node: str, to_node: str, label: str = None) -
         return f"Graph '{graph_name}' does not exist."
 
     if label:
-        graphs[graph_name].edge(from_node, to_node, label=label)
+        graphs[graph_name].edge(from_block, to_block, label=label, color=color, style=style, penwidth=penwidth)
     else:
-        graphs[graph_name].edge(from_node, to_node)
+        graphs[graph_name].edge(from_block, to_block, color=color, style=style, penwidth=penwidth)
     
-    return f"Edge from '{from_node}' to '{to_node}' added in graph '{graph_name}' with label '{label}'." if label else f"Edge from '{from_node}' to '{to_node}' added in graph '{graph_name}'."
+    return f"Connection from '{from_block}' to '{to_block}' added in graph '{graph_name}' with label '{label}', color '{color}', style '{style}', and penwidth '{penwidth}'." if label else f"Connection from '{from_block}' to '{to_block}' added in graph '{graph_name}' with color '{color}', style '{style}', and penwidth '{penwidth}'."
 
 @mcp.tool()
-def delete_node(graph_name: str, node_name: str) -> str:
-    """Delete a node and its edges from the graph."""
+def delete_block(graph_name: str, block_name: str) -> str:
+    """Delete a block and its edges from the graph."""
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
 
@@ -138,13 +270,13 @@ def delete_node(graph_name: str, node_name: str) -> str:
     new_graph.edge_attr.update(original_graph.edge_attr)
 
     for line in original_graph.body:
-        # Skip any node or edge involving the node to be deleted
-        if node_name in line:
+        # Skip any block or edge involving the block to be deleted
+        if block_name in line:
             continue
         new_graph.body.append(line)
-    print(f"Deleted node {node_name}", file=sys.stderr)
+    print(f"Deleted block {block_name}", file=sys.stderr)
     graphs[graph_name] = new_graph
-    return f"Node '{node_name}' and its edges deleted from graph '{graph_name}'."
+    return f"Block '{block_name}' and its edges deleted from graph '{graph_name}'."
 
 @mcp.tool()
 def render_graph(graph_name: str) -> str:
@@ -270,13 +402,13 @@ def display_graph(resource_uri: str) -> Image:
     return Image(data=entry["bytes"], format="png")
 
 @mcp.tool()
-async def find_icon(graph_name: str, node_name: str, search_query: str, ctx: Context, color: str = "black", size: int = 64) -> str:
+async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Context, color: str = "black", size: int = 64) -> str:
     """
-    Searches for an icon in the TkFontAwesome library and assigns it to a specific node in the specified graph.
+    Searches for an icon in the TkFontAwesome library and assigns it to a specific block in the specified graph.
 
     Args:
-        graph_name: The name of the graph containing the node.
-        node_name: The name of the node to which the icon will be applied.
+        graph_name: The name of the graph containing the block.
+        block_name: The name of the block to which the icon will be applied.
         search_query: The search query to find the icon.
         color: The color of the icon. Defaults to "black".
         size: The size of the icon. Defaults to 64.
@@ -290,9 +422,9 @@ async def find_icon(graph_name: str, node_name: str, search_query: str, ctx: Con
 
     graph = graphs[graph_name]
 
-    # Check if the node exists in the graph
-    if node_name not in graph.body:
-        return f"Node '{node_name}' does not exist in graph '{graph_name}'."
+    # Check if the block exists in the graph
+    if block_name not in graph.body:
+        return f"Block '{block_name}' does not exist in graph '{graph_name}'."
 
     try:
         # Generate an icon image using TkFontAwesome
@@ -303,14 +435,101 @@ async def find_icon(graph_name: str, node_name: str, search_query: str, ctx: Con
         icon_image.save(buffer, format="PNG")
         buffer.seek(0)
 
-        # Apply the icon to the node
-        graph.node(node_name, image=buffer, shape="none", label="")
-        await ctx.info(f"Icon applied to node '{node_name}' in graph '{graph_name}' with color '{color}' and size '{size}'.")
-        return f"Icon applied to node '{node_name}' in graph '{graph_name}' with color '{color}' and size '{size}'."
+        # Apply the icon to the block
+        graph.node(block_name, image=buffer, shape="none", label="")
+        await ctx.info(f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'.")
+        return f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'."
 
     except Exception as e:
         return f"Error while searching for icon: {str(e)}"
+    
+@mcp.tool()
+async def set_graph_theme(graph_name: str, theme: str, ctx: Context, custom_theme: dict = None) -> str:
+    """
+    Applies a general stylistic theme to the specified graph, updating past nodes and edges.
+
+    Args:
+        graph_name: The name of the graph to style.
+        theme: The name of the theme to apply. Available themes are:
+            - "classic": Default Graphviz style.
+            - "dark": Dark background with light-colored nodes and edges.
+            - "minimal": Simplistic style with minimal decorations.
+            - "vibrant": Bright colors for nodes and edges.
+            - "monochrome": Black and white style.
+            - "custom": User-defined custom theme.
+        custom_theme: A dictionary defining custom theme attributes. Should include keys like
+                      'bgcolor', 'node_attr', and 'edge_attr' (optional).
+
+    Returns:
+        A confirmation message.
+    """
+    if graph_name not in graphs:
+        return f"Graph '{graph_name}' does not exist."
+
+    valid_themes = {"classic", "dark", "minimal", "vibrant", "monochrome", "custom"}
+    if theme not in valid_themes:
+        return f"Invalid theme '{theme}'. Available themes are: {', '.join(valid_themes)}."
+
+    graph = graphs[graph_name]
+
+    # Define theme attributes
+    theme_attributes = {
+        "classic": {
+            "bgcolor": "white",
+            "node_attr": {"style": "solid", "color": "black", "fontcolor": "black"},
+            "edge_attr": {"color": "black"}
+        },
+        "dark": {
+            "bgcolor": "black",
+            "node_attr": {"style": "filled", "color": "white", "fontcolor": "white", "fillcolor": "gray20"},
+            "edge_attr": {"color": "white"}
+        },
+        "minimal": {
+            "bgcolor": "white",
+            "node_attr": {"style": "solid", "color": "black", "fontcolor": "black", "shape": "point"},
+            "edge_attr": {"color": "black", "style": "dotted"}
+        },
+        "vibrant": {
+            "bgcolor": "white",
+            "node_attr": {"style": "filled", "color": "black", "fontcolor": "white", "fillcolor": "orange"},
+            "edge_attr": {"color": "blue", "style": "bold"}
+        },
+        "monochrome": {
+            "bgcolor": "white",
+            "node_attr": {"style": "solid", "color": "black", "fontcolor": "black"},
+            "edge_attr": {"color": "black", "style": "solid"}
+        },
+        "custom": custom_theme if custom_theme else {}
+    }
+
+    # Apply the selected theme
+    if theme == "custom" and not custom_theme:
+        return "Invalid custom theme. Please provide a dictionary with 'bgcolor', 'node_attr', and 'edge_attr'."
+
+    theme_config = theme_attributes[theme]
+    graph.attr(bgcolor=theme_config.get("bgcolor", "white"))
+    graph.node_attr.update(theme_config.get("node_attr", {}))
+    graph.edge_attr.update(theme_config.get("edge_attr", {}))
+
+    # Update existing nodes and edges
+    for i, line in enumerate(graph.body):
+        if line.startswith("node"):
+            for key, value in theme_config.get("node_attr", {}).items():
+                if f"{key}=" not in line:
+                    graph.body[i] = line.strip() + f", {key}={value}"
+        elif line.startswith("edge"):
+            for key, value in theme_config.get("edge_attr", {}).items():
+                if f"{key}=" not in line:
+                    graph.body[i] = line.strip() + f", {key}={value}"
+
+    await ctx.info(f"Theme '{theme}' applied to graph '{graph_name}', and past nodes and edges updated.")
+    return f"Theme '{theme}' applied to graph '{graph_name}', and past nodes and edges updated."
 
 if __name__ == "__main__":
     print("Starting Graphviz server...")
     mcp.run(transport="sse")
+
+# TODO: Add a reder flag to allow the user to render the graph and return the image bytes directly. at the end of any tool call
+# TODO: Add subgraphs   
+# TODO: Multi user management 
+# TODO: Good system prompt for the overall process 
