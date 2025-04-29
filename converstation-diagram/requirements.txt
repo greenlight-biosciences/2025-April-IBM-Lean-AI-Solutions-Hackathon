@@ -1,0 +1,8 @@
+streamlit>=1.15.0         # UI framework for Python apps 
+httpx>=0.24.0              # Async HTTP client for FastAPI calls 
+pydub>=0.25.1              # Audio manipulation & resampling :
+ffmpeg-python>=0.2.0       # Optional wrapper if you script FFmpeg directly  
+uvicorn[standard]>=0.23.0  # ASGI server (if bundling FastAPI in same container)  
+numpy>=1.24.0              # Numerical arrays (pydub depends on it)  
+typing-extensions>=4.5.0   # Backports for new typing features  
+speech_recognition
