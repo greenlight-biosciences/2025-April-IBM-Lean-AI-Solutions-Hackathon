@@ -10,121 +10,183 @@ import subprocess
 import sys
 import threading
 import queue
+import base64
+import asyncio
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.resources import load_mcp_resources
+from langchain_openai import AzureChatOpenAI
 import time
 from PIL import Image
-from langchain_core.messages import HumanMessage, SystemMessage
-import io
+import io, json
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langgraph.prebuilt import create_react_agent
 from AudioRecorder import AudioRecorder, check_ffmpeg, save_audio_chunk, create_workflow_image
+from fastmcp import Client
+st.set_page_config(layout="wide")
 
-# Initialize the Whisper model with a smaller model for faster processing
+async def get_workflow_image():
+    """Fetch a workflow image from an MCP resource with retries and logging"""
+
+    async with Client("http://localhost:8000/sse") as client:
+        # Make sure this is a valid URI to a single image file!
+        resource_uri = "file://graph_images"
+        response = await client.read_resource(resource_uri)
+        for content in response:
+            img_bytes = json.loads(content.text)[0]['bytes']
+            # convert this img_bytes in str into base64
+            img_bytes = base64.b64decode(img_bytes)
+            st.session_state.workflow_img = img_bytes
+            # st.image(img_bytes, caption="Graphviz Output", use_column_width=True)
+            # # return img_bytes
+
+def get_image():
+    asyncio.run(get_workflow_image())
+    print("Image fetched successfully")
+    st.rerun()
+
+# Initialize LLM
+lc_llm = AzureChatOpenAI(
+    model_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
+    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    deployment_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
+    openai_api_key=os.environ["AZURE_OPENAI_KEY"],
+    openai_api_version=os.environ["AZURE_OPENAI_VERSION"],
+)
+
+# Sidebar
+with st.sidebar:
+    st.title("Settings")
+
+    model_size = st.selectbox(
+        "Select Model Size",
+        ["tiny", "base", "small"],
+        index=0,
+        help="Smaller models are faster but less accurate"
+    )
+
+    st.subheader("Recording Settings")
+    chunk_duration = st.slider("Chunk Duration (seconds)", 1.0, 5.0, 3.0, 0.5)
+    overlap = st.slider("Overlap (seconds)", 0.5, 2.5, 1.5, 0.5)
+
+    st.subheader("Status")
+    if st.session_state.get('is_recording', False):
+        st.error("Recording in progress...")
+    else:
+        st.success("Ready to record")
+
+# Initialize the Whisper model
 @st.cache_resource
 def load_model():
     try:
-        # Using 'tiny' model for faster transcription
         return whisper.load_model("tiny")
     except Exception as e:
         st.error(f"Error loading Whisper model: {str(e)}")
         st.info("Please make sure FFmpeg is installed on your system.")
         return None
 
-def display_chat_message(message, timestamp, source="User"):
-    """Display a chat message with timestamp and source label"""
-    # Assign colors based on source
-    if source == "User (Manual)":
-        bg_color = "#27ae60"  # Green for manual user entries
-        label = "User (Manual):"
-    elif source == "User (Transcribed)":
-        bg_color = "#2c3e50"  # Dark blue for transcribed user messages
-        label = "User:"
-    elif source == "AI":
-        bg_color = "#3498db"  # Light blue for AI messages (placeholder)
-        label = "AI:"
-    else: # Default fallback
-        bg_color = "#7f8c8d"  # Gray for unknown source
-        label = f"{source}:"
-        
-    st.markdown(f"""
-        <div style='
-            background-color: {bg_color};
-            color: white;
-            padding: 8px;
-            border-radius: 8px;
-            margin: 4px 0;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        '>
-            <div style='font-size: 0.7em; color: #bdc3c7; margin-bottom: 3px; font-weight: bold;'>
-                {label} <span style='color: #95a5a6; font-weight: normal;'>{timestamp}</span>
-            </div>
-            <div style='font-size: 0.9em;'>{message}</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-# Callback function to handle manual message submission
+# Manual message submission handler
 def handle_manual_submit(message_text):
     if message_text.strip():
         timestamp = datetime.now().strftime("%H:%M:%S")
-        new_transcription = {
-            "text": message_text.strip(),
-            "timestamp": timestamp,
-            "source": "User (Manual)" # Changed from is_manual
-        }
+        human_msg = HumanMessage(
+            content=message_text.strip(),
+            additional_kwargs={
+                "timestamp": timestamp,
+                "source": "User (Manual)"
+            }
+        )
         if 'transcriptions' not in st.session_state:
             st.session_state.transcriptions = []
-        st.session_state.transcriptions.append(new_transcription)
-        # Let clear_on_submit=True handle clearing
+        st.session_state.transcriptions.append(human_msg)
+        run_async_task()
+
+# Async query processor
+async def process_query():
+    async with MultiServerMCPClient(
+        {
+            "Graphviz": {
+                "url": "http://localhost:8000/sse",
+                "transport": "sse",
+            },
+            
+        }
+    ) as client:
+        # Make sure this is a valid URI to a single image file!
+        # try:
+        #     resource_uri = "file://graph_images"
+        #     response = await (client, resource_uri)
+        #     for content in response:
+        #         img_bytes = json.loads(content.text)[0]['bytes']
+        #         st.image(img_bytes, caption="Graphviz Output", use_column_width=True)
+        # except Exception as e:
+        #     st.error(f"Error fetching workflow image: {str(e)}")
+        
+        tools = client.get_tools()
+        agent = create_react_agent(lc_llm, tools)
+
+        response = await agent.ainvoke({"messages": st.session_state.transcriptions})
+        ai_message = response["messages"][-1]
+        # print(ai_message)
+        st.session_state.transcriptions.append(ai_message)
+
+        return ai_message.content
+
+# Sync wrapper
+def run_async_task():
+    return asyncio.run(process_query())
 
 def main():
-    st.set_page_config(layout="wide")
-    
-    # Sidebar
-    with st.sidebar:
-        st.title("Settings")
-        
-        # Model selection
-        model_size = st.selectbox(
-            "Select Model Size",
-            ["tiny", "base", "small"],
-            index=0,
-            help="Smaller models are faster but less accurate"
-        )
-        
-        # Recording settings
-        st.subheader("Recording Settings")
-        chunk_duration = st.slider("Chunk Duration (seconds)", 1.0, 5.0, 3.0, 0.5)
-        overlap = st.slider("Overlap (seconds)", 0.5, 2.5, 1.5, 0.5)
-        
-        # Status
-        st.subheader("Status")
-        if 'is_recording' in st.session_state:
-            if st.session_state.is_recording:
-                st.error("Recording in progress...")
-            else:
-                st.success("Ready to record")
-    
-    # Main content
+    # Initialize session state
+    if 'recorder' not in st.session_state:
+        st.session_state.recorder = AudioRecorder()
+    if 'transcriptions' not in st.session_state:
+        st.session_state.transcriptions = [
+            SystemMessage(
+                content=(
+                    """Welcome to the Graphviz Diagram Drawing Assistant!
+
+                        I will guide you through the process of creating a diagram step by step. Here's how it works:
+                        1. You will describe the diagram you want to create, including its purpose and key components.
+                        2. I will propose a plan for the diagram, including the blocks/nodes, connections, and layout.
+                        3. You will review and confirm the plan before we proceed.
+                        4. Render after each step to show progress, always use the tool and never show the images in chat.
+
+                        Let's get started! Please describe the diagram you want to create.
+                    """
+                )
+            )
+        ]
+    if 'is_recording' not in st.session_state:
+        st.session_state.is_recording = False
+    if 'model' not in st.session_state or st.session_state.get('model_size') != model_size:
+        st.session_state.model_size = model_size
+        st.session_state.model = whisper.load_model(model_size)
+    if 'last_transcription' not in st.session_state:
+        st.session_state.last_transcription = ""
+    if 'workflow_img' not in st.session_state:
+        st.session_state.workflow_img = None
+
     col1, col2 = st.columns([2, 1])
-    
+
     with col1:
         st.title("Real-time Audio Transcription")
-        
-        # Workflow visualization
         st.subheader("Workflow")
-        workflow_img = create_workflow_image()
-        st.image(workflow_img, use_column_width=True)
+        if st.session_state.workflow_img is not None:
+            st.image(st.session_state.workflow_img, caption="Workflow Diagram", use_column_width=True)
+        # workflow_img = create_workflow_image()
+        # st.image(workflow_img, use_column_width=True)
 
-        # Convert image to bytes for download
-        buf = io.BytesIO()
-        workflow_img.save(buf, format="PNG")
-        byte_im = buf.getvalue()
+        # buf = io.BytesIO()
+        # workflow_img.save(buf, format="PNG")
+        # byte_im = buf.getvalue()
 
-        st.download_button(
-            label=":arrow_down: Download Workflow Image",
-            data=byte_im,
-            file_name="workflow_diagram.png",
-            mime="image/png"
-        )
-        
-        # Record controls
+        # st.download_button(
+        #     label=":arrow_down: Download Workflow Image",
+        #     data=byte_im,
+        #     file_name="workflow_diagram.png",
+        #     mime="image/png"
+        # )
+
         col_controls = st.columns(2)
         with col_controls[0]:
             if st.button(":microphone: Start Recording", disabled=st.session_state.get('is_recording', False)):
@@ -133,33 +195,28 @@ def main():
                 st.session_state.recorder.start_recording()
                 st.session_state.is_recording = True
                 st.rerun()
-        
+
         with col_controls[1]:
             if st.button(":octagonal_sign: Stop Recording", disabled=not st.session_state.get('is_recording', False)):
                 st.session_state.recorder.stop_recording()
                 st.session_state.is_recording = False
                 st.rerun()
-    
+
     with col2:
         st.title("Transcription")
-        
-        # Top controls: Toggle and Download button area
         top_col1, top_col2 = st.columns([1, 1])
         with top_col1:
             show_transcript = st.checkbox("Show Transcript", value=True)
         with top_col2:
-            download_button_placeholder = st.empty() # Placeholder for download button
+            download_button_placeholder = st.empty()
 
-        # Conditionally display transcript elements
         if show_transcript:
-            # --- Download Button Logic (Moved inside conditional block) ---
-            if st.session_state.get('transcriptions', []): # Check if there are transcriptions
-                with download_button_placeholder.container(): # Populate the placeholder
+            if st.session_state.get('transcriptions', []):
+                with download_button_placeholder.container():
                     timestamp_dl = datetime.now().strftime("%Y%m%d_%H%M%S")
                     transcription_text = "\n".join([
-                        f"[{msg['timestamp']}] {msg.get('source', 'Unknown')}: {msg['text']}"
+                        f"[{msg.additional_kwargs.get('timestamp', '')}] {msg.additional_kwargs.get('source', 'User')}: {msg.content}"
                         for msg in st.session_state.transcriptions
-                        if isinstance(msg, dict) and "text" in msg and "timestamp" in msg
                     ])
                     st.download_button(
                         label=":arrow_down: Download Transcript",
@@ -168,80 +225,63 @@ def main():
                         mime="text/plain",
                         key="download_button"
                     )
-            # --- End Download Button Logic ---
 
-            # --- Manual message input form (inside conditional block) ---
             with st.form("manual_message_form", clear_on_submit=True):
-                manual_message = st.text_area("Add Manual Message", 
-                                            placeholder="Type your message here...",
-                                            height=80,
-                                            key="manual_input")
+                manual_message = st.text_area("Add Manual Message",
+                                              placeholder="Type your message here...",
+                                              height=80,
+                                              key="manual_input")
                 submit_manual = st.form_submit_button(":pencil2: Add Message")
 
-                if submit_manual: # Check if submitted
+                if submit_manual:
                     handle_manual_submit(st.session_state.manual_input)
-            # --- End Manual message input form ---
+                    get_image()
 
-            # --- Placeholder container for messages (inside conditional block) ---
-            chat_placeholder = st.container()
-            with chat_placeholder:
-                # Display messages in reverse order (newest first)
-                for msg in reversed(st.session_state.get('transcriptions', [])):
-                    if isinstance(msg, dict) and "text" in msg and "timestamp" in msg:
-                        display_chat_message(
-                            msg["text"], 
-                            msg["timestamp"],
-                            source=msg.get("source", "User (Transcribed)")
-                        )
-            # --- End Placeholder container ---
+            # Chat-style display using st.chat_message
+            for msg in st.session_state.get('transcriptions', [])[::-1]:
+                if isinstance(msg, HumanMessage):
+                    role = "user"
+                    source = msg.additional_kwargs.get("source", "User")
+                    timestamp = msg.additional_kwargs.get("timestamp", "")
+                    with st.chat_message(role):
+                        st.markdown(f"**{source}** — *{timestamp}*\n\n{msg.content}")
+                if isinstance(msg, AIMessage):
+                    role = "assistant"
+                    source = msg.additional_kwargs.get("source", "Assistant")
+                    timestamp = msg.additional_kwargs.get("timestamp", "")
+                    with st.chat_message(role):
+                        st.markdown(f"**{source}** — *{timestamp}*\n\n{msg.content}")
         else:
-             # Optionally clear the placeholder if transcript is hidden
-             download_button_placeholder.empty()
+            download_button_placeholder.empty()
 
-    # Initialize session state
-    if 'recorder' not in st.session_state:
-        st.session_state.recorder = AudioRecorder()
-    if 'transcriptions' not in st.session_state:
-        st.session_state.transcriptions = []
-    if 'is_recording' not in st.session_state:
-        st.session_state.is_recording = False
-    if 'model' not in st.session_state or st.session_state.get('model_size') != model_size:
-        st.session_state.model_size = model_size
-        st.session_state.model = whisper.load_model(model_size)
-    if 'last_transcription' not in st.session_state:
-        st.session_state.last_transcription = ""
-    
-    # Check for FFmpeg
+    # FFmpeg check
     if not check_ffmpeg():
         st.error("FFmpeg is not installed or not in PATH. Please install FFmpeg to use this application.")
         st.info("You can download FFmpeg from: https://ffmpeg.org/download.html")
         st.info("After installing, make sure to add FFmpeg to your system PATH.")
         st.info("Current PATH: " + os.environ.get('PATH', ''))
         return
-    
-    # Process audio and transcribe
+
+    # Audio processing and transcription
     if st.session_state.is_recording:
         sample_rate = 16000
         chunk_size = 1024
-        
-        # Calculate number of chunks needed
+
         samples_per_chunk = int(chunk_duration * sample_rate / chunk_size)
         overlap_samples = int(overlap * sample_rate / chunk_size)
-        
-        # Collect audio chunks
+
         audio_chunks = []
         start_time = time.time()
-        
+
         while time.time() - start_time < chunk_duration and st.session_state.is_recording:
             chunk = st.session_state.recorder.get_audio_chunk()
             if chunk:
                 audio_chunks.append(chunk)
-        
+
         if audio_chunks:
-            # Combine chunks and transcribe
             audio_data = b''.join(audio_chunks)
             audio_file = save_audio_chunk(audio_data)
-            
+
             if audio_file:
                 try:
                     result = st.session_state.model.transcribe(
@@ -249,35 +289,34 @@ def main():
                         fp16=False,
                         language="en"
                     )
-                    
+
                     if result["text"].strip():
-                        # Only add new content that hasn't been transcribed before
                         new_text = result["text"]
                         if st.session_state.last_transcription:
-                            # Find the overlapping part
                             overlap_text = st.session_state.last_transcription[-len(new_text)//2:]
                             if overlap_text in new_text:
-                                # Remove the overlapping part
                                 new_text = new_text[new_text.find(overlap_text) + len(overlap_text):]
-                        
+
                         if new_text.strip():
                             timestamp = datetime.now().strftime("%H:%M:%S")
-                            new_transcription = {
-                                "text": new_text,
-                                "timestamp": timestamp,
-                                "is_manual": False
-                            }
-                            st.session_state.transcriptions.append(new_transcription)
+                            transcribed_msg = HumanMessage(
+                                content=new_text.strip(),
+                                additional_kwargs={
+                                    "timestamp": timestamp,
+                                    "source": "User (Transcribed)"
+                                }
+                            )
+                            st.session_state.transcriptions.append(transcribed_msg)
+                            run_async_task() # To make a call the MCP
+                            get_image() # To update the image
                             st.session_state.last_transcription = result["text"]
-                            # No need to display here, rerun will handle it
                 except Exception as e:
                     st.error(f"Error during transcription: {str(e)}")
                 finally:
                     if os.path.exists(audio_file):
                         os.unlink(audio_file)
-        
-        # Rerun to update the display with new transcriptions
+
         st.rerun()
 
 if __name__ == "__main__":
-    main() 
+    main()

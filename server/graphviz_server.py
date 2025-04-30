@@ -11,7 +11,7 @@ import requests
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.schema import Document
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
 from langchain.pydantic_v1 import BaseModel, Field
 import base64
@@ -52,7 +52,7 @@ class ImageAnalysis(BaseModel):
     function: str = Field(..., description="The primary function or purpose of what is depicted")
     detailed_description: str = Field(..., description="A thorough description of the image contents and context")
 
-parser = PydanticOutputParser(pydantic_object=ImageAnalysis)
+parser = JsonOutputParser(pydantic_object=ImageAnalysis)
 format_instructions = parser.get_format_instructions()
 
 vision_system_prompt = PromptTemplate(
@@ -72,10 +72,10 @@ vision_system_prompt = PromptTemplate(
 graphs = {}
 resource_registry  = {}
 
-@mcp.resource("dir://file")
+@mcp.resource("file://graph_images")
 async def list_resources() -> list[dict]:
     return [
-        {"uri": uri, "mimeType": entry["mimeType"], "filepath": entry["filepath"]}
+        {"uri": uri, "mimeType": entry["mimeType"], "filepath": entry["filepath"], "bytes": entry["bytes"]}
         for uri, entry in resource_registry.items()
     ]
 
@@ -138,7 +138,7 @@ async def show_example_system_prompt(ctx: Context) -> str:
     return "Example system prompt displayed to the user."
 
 @mcp.tool()
-async def create_graphviz_graph(graph_name: str, rankdir: str = "TB", bgcolor: str = "white", fontname: str = "Helvetica", fontsize: str = "12") -> str:
+async def create_graphviz_graph(graph_name: str="workflow", rankdir: str = "TB", bgcolor: str = "white", fontname: str = "Helvetica", fontsize: str = "12") -> str:
     """
     Creates a new Graphviz Digraph object with optional styling and stores it in memory.
     
@@ -360,11 +360,16 @@ def render_graph(graph_name: str) -> str:
 
     # Store the image bytes in the resource registry
     resource_uri = f"file://graph_images/{output_path}"
+    # resource_registry[resource_uri] = {
+    #     "filepath": output_path,
+    #     "mimeType": "image/png",
+    #     "bytes": base64 # image_bytes,
+    # }
     resource_registry[resource_uri] = {
         "filepath": output_path,
         "mimeType": "image/png",
-        "bytes": image_bytes,
-    }
+        "bytes": base64.b64encode(image_bytes).decode('utf-8'),
+    }    
 
     return f"Graph '{graph_name}' rendered successfully. Check the output at {resource_uri}"
 
@@ -437,28 +442,28 @@ async def label_diagram(graph_name: str, title: str, ctx: Context, position: str
     await ctx.info(f"Label '{title}' added to graph '{graph_name}' at position '{position}'.")
     return f"Label '{title}' added to graph '{graph_name}' at position '{position}'."
 
-@mcp.tool()
-def display_graph(resource_uri: str) -> Image:
-    """
-    Displays a graph image based on the provided resource URI.
+# @mcp.tool()
+# def display_graph(resource_uri: str) -> Image:
+#     """
+#     Displays a graph image based on the provided resource URI.
 
-    This tool retrieves a graph resource from the resource registry using the given URI 
-    and returns it as an image in png format. If the resource is not found, an exception 
-    is raised.
+#     This tool retrieves a graph resource from the resource registry using the given URI 
+#     and returns it as an image in png format. If the resource is not found, an exception 
+#     is raised.
 
-    Args:
-        resource_uri (str): The URI of the resource to retrieve.
+#     Args:
+#         resource_uri (str): The URI of the resource to retrieve.
 
-    Returns:
-        Image: The graph image in png format.
+#     Returns:
+#         Image: The graph image in png format.
 
-    Raises:
-        Exception: If the resource is not found in the registry.
-    """
-    entry = resource_registry.get(resource_uri)
-    if not entry:
-        raise Exception("Resource not found")
-    return Image(data=entry["bytes"], format="png")
+#     Raises:
+#         Exception: If the resource is not found in the registry.
+#     """
+#     entry = resource_registry.get(resource_uri)
+#     if not entry:
+#         raise Exception("Resource not found")
+#     return Image(data=entry["bytes"], format="png")
 
 @mcp.tool()
 async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Context, color: str = "black", size: int = 64) -> str:
@@ -502,87 +507,87 @@ async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Co
     except Exception as e:
         return f"Error while searching for icon: {str(e)}"
     
-@mcp.tool()
-async def set_graph_theme(graph_name: str, theme: str, ctx: Context, custom_theme: dict = None) -> str:
-    """
-    Applies a general stylistic theme to the specified graph, updating past nodes and edges.
+# @mcp.tool()
+# async def set_graph_theme(graph_name: str, theme: str, ctx: Context, custom_theme: dict = None) -> str:
+#     """
+#     Applies a general stylistic theme to the specified graph, updating past nodes and edges.
 
-    Args:
-        graph_name: The name of the graph to style.
-        theme: The name of the theme to apply. Available themes are:
-            - "classic": Default Graphviz style.
-            - "dark": Dark background with light-colored nodes and edges.
-            - "minimal": Simplistic style with minimal decorations.
-            - "vibrant": Bright colors for nodes and edges.
-            - "monochrome": Black and white style.
-            - "custom": User-defined custom theme.
-        custom_theme: A dictionary defining custom theme attributes. Should include keys like
-                      'bgcolor', 'node_attr', and 'edge_attr' (optional).
+#     Args:
+#         graph_name: The name of the graph to style.
+#         theme: The name of the theme to apply. Available themes are:
+#             - "classic": Default Graphviz style.
+#             - "dark": Dark background with light-colored nodes and edges.
+#             - "minimal": Simplistic style with minimal decorations.
+#             - "vibrant": Bright colors for nodes and edges.
+#             - "monochrome": Black and white style.
+#             - "custom": User-defined custom theme.
+#         custom_theme: A dictionary defining custom theme attributes. Should include keys like
+#                       'bgcolor', 'node_attr', and 'edge_attr' (optional).
 
-    Returns:
-        A confirmation message.
-    """
-    if graph_name not in graphs:
-        return f"Graph '{graph_name}' does not exist."
+#     Returns:
+#         A confirmation message.
+#     """
+#     if graph_name not in graphs:
+#         return f"Graph '{graph_name}' does not exist."
 
-    valid_themes = {"classic", "dark", "minimal", "vibrant", "monochrome", "custom"}
-    if theme not in valid_themes:
-        return f"Invalid theme '{theme}'. Available themes are: {', '.join(valid_themes)}."
+#     valid_themes = {"classic", "dark", "minimal", "vibrant", "monochrome", "custom"}
+#     if theme not in valid_themes:
+#         return f"Invalid theme '{theme}'. Available themes are: {', '.join(valid_themes)}."
 
-    graph = graphs[graph_name]
+#     graph = graphs[graph_name]
 
-    # Define theme attributes
-    theme_attributes = {
-        "classic": {
-            "bgcolor": "white",
-            "node_attr": {"style": "solid", "color": "black", "fontcolor": "black"},
-            "edge_attr": {"color": "black"}
-        },
-        "dark": {
-            "bgcolor": "black",
-            "node_attr": {"style": "filled", "color": "white", "fontcolor": "white", "fillcolor": "gray20"},
-            "edge_attr": {"color": "white"}
-        },
-        "minimal": {
-            "bgcolor": "white",
-            "node_attr": {"style": "solid", "color": "black", "fontcolor": "black", "shape": "point"},
-            "edge_attr": {"color": "black", "style": "dotted"}
-        },
-        "vibrant": {
-            "bgcolor": "white",
-            "node_attr": {"style": "filled", "color": "black", "fontcolor": "white", "fillcolor": "orange"},
-            "edge_attr": {"color": "blue", "style": "bold"}
-        },
-        "monochrome": {
-            "bgcolor": "white",
-            "node_attr": {"style": "solid", "color": "black", "fontcolor": "black"},
-            "edge_attr": {"color": "black", "style": "solid"}
-        },
-        "custom": custom_theme if custom_theme else {}
-    }
+#     # Define theme attributes
+#     theme_attributes = {
+#         "classic": {
+#             "bgcolor": "white",
+#             "node_attr": {"style": "solid", "color": "black", "fontcolor": "black"},
+#             "edge_attr": {"color": "black"}
+#         },
+#         "dark": {
+#             "bgcolor": "black",
+#             "node_attr": {"style": "filled", "color": "white", "fontcolor": "white", "fillcolor": "gray20"},
+#             "edge_attr": {"color": "white"}
+#         },
+#         "minimal": {
+#             "bgcolor": "white",
+#             "node_attr": {"style": "solid", "color": "black", "fontcolor": "black", "shape": "point"},
+#             "edge_attr": {"color": "black", "style": "dotted"}
+#         },
+#         "vibrant": {
+#             "bgcolor": "white",
+#             "node_attr": {"style": "filled", "color": "black", "fontcolor": "white", "fillcolor": "orange"},
+#             "edge_attr": {"color": "blue", "style": "bold"}
+#         },
+#         "monochrome": {
+#             "bgcolor": "white",
+#             "node_attr": {"style": "solid", "color": "black", "fontcolor": "black"},
+#             "edge_attr": {"color": "black", "style": "solid"}
+#         },
+#         "custom": custom_theme if custom_theme else {}
+#     }
 
-    # Apply the selected theme
-    if theme == "custom" and not custom_theme:
-        return "Invalid custom theme. Please provide a dictionary with 'bgcolor', 'node_attr', and 'edge_attr'."
+#     # Apply the selected theme
+#     if theme == "custom" and not custom_theme:
+#         return "Invalid custom theme. Please provide a dictionary with 'bgcolor', 'node_attr', and 'edge_attr'."
 
-    theme_config = theme_attributes[theme]
-    graph.attr(bgcolor=theme_config.get("bgcolor", "white"))
-    graph.node_attr.update(theme_config.get("node_attr", {}))
-    graph.edge_attr.update(theme_config.get("edge_attr", {}))
+#     theme_config = theme_attributes[theme]
+#     graph.attr(bgcolor=theme_config.get("bgcolor", "white"))
+#     graph.node_attr.update(theme_config.get("node_attr", {}))
+#     graph.edge_attr.update(theme_config.get("edge_attr", {}))
 
-    # Update existing nodes and edges
-    for i, line in enumerate(graph.body):
-        if line.startswith("node"):
-            for key, value in theme_config.get("node_attr", {}).items():
-                if f"{key}=" not in line:
-                    graph.body[i] = line.strip() + f", {key}={value}"
-        elif line.startswith("edge"):
-            for key, value in theme_config.get("edge_attr", {}).items():
-                if f"{key}=" not in line:
-                    graph.body[i] = line.strip() + f", {key}={value}"
+#     # Update existing nodes and edges
+#     for i, line in enumerate(graph.body):
+#         if line.startswith("node"):
+#             for key, value in theme_config.get("node_attr", {}).items():
+#                 if f"{key}=" not in line:
+#                     graph.body[i] = line.strip() + f", {key}={value}"
+#         elif line.startswith("edge"):
+#             for key, value in theme_config.get("edge_attr", {}).items():
+#                 if f"{key}=" not in line:
+#                     graph.body[i] = line.strip() + f", {key}={value}"
 
-    await ctx.info(f"Theme '{theme}' applied to graph '{graph_name}', and past nodes and edges updated.")
-    return f"Theme '{theme}' applied to graph '{graph_name}', and past nodes and edges updated."
+#     await ctx.info(f"Theme '{theme}' applied to graph '{graph_name}', and past nodes and edges updated.")
+#     return f"Theme '{theme}' applied to graph '{graph_name}', and past nodes and edges updated."
     
 @mcp.tool()
 async def query_existing_diagrams(query: str, ctx: Context) -> str:
@@ -624,24 +629,6 @@ async def describe_graph_from_resource(resource_uri: str, ctx: Context) -> str:
     image_bytes = entry["bytes"]
 
     print(f"describing the graph...", file=sys.stderr)
-    # Send the image to the IBM Vision Granite model for description
-    # response = vision_model.invoke([
-    #     {
-    #         "role": "user",
-    #         "content": [
-    #             {
-    #                 "type": "image_url",
-    #                 "image_url": {
-    #                     "url": f"data:image/png;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
-    #                 }
-    #             },
-    #             {
-    #                 "type": "text",
-    #                 "text": "Please describe this image in detail."
-    #             }
-    #         ]
-    #     }
-    # ])
     messages = [
         {"role": "system", "content": vision_system_prompt.format()},
         {
