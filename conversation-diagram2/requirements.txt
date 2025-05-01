@@ -2,3 +2,7 @@ streamlit==1.32.0
 openai-whisper==20231117
 pyaudio==0.2.14
 numpy==1.26.4 
+langchain_ibm 
+langchain_mcp_adapters 
+langchain_openai 
+langgrap

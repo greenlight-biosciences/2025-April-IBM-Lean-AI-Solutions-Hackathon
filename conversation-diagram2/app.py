@@ -24,6 +24,7 @@ from langgraph.prebuilt import create_react_agent
 from AudioRecorder import AudioRecorder, check_ffmpeg, save_audio_chunk, create_workflow_image
 from fastmcp import Client
 from dotenv import load_dotenv
+import requests
 load_dotenv()
 st.set_page_config(layout="wide")
 
@@ -305,11 +306,12 @@ def main():
 
             if audio_file:
                 try:
-                    import requests
+                    
 
                     with open(audio_file, "rb") as f:
                         files = {"file": ("audio.wav", f, "audio/wav")}
-                        response = requests.post("http://localhost:8001/transcribe/", files=files)
+                        headers = {"x-api-key": os.getenv("SPEECHAPIKEY", "")}
+                        response = requests.post(os.getenv("SPEECHAPIURL", "http://localhost:8000/transcribe/"), files=files, headers=headers)
 
 
                     if response.status_code == 200:
