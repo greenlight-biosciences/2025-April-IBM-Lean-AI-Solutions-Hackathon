@@ -9,7 +9,7 @@ from datetime import datetime
 import subprocess
 import sys
 import threading
-from langchain_ibm import ChatWatsonx
+from langchain_ibm import WatsonxLLM, ChatWatsonx
 import queue
 import base64
 import asyncio
@@ -23,6 +23,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
 from AudioRecorder import AudioRecorder, check_ffmpeg, save_audio_chunk, create_workflow_image
 from fastmcp import Client
+from dotenv import load_dotenv
+load_dotenv()
 st.set_page_config(layout="wide")
 
 async def get_workflow_image():
@@ -49,30 +51,30 @@ def get_image():
     print("Image fetched successfully")
     st.rerun()
 
-# # Initialize LLM
-# lc_llm = AzureChatOpenAI(
-#     model_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-#     azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-#     deployment_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-#     openai_api_key=os.environ["AZURE_OPENAI_KEY"],
-#     openai_api_version=os.environ["AZURE_OPENAI_VERSION"],
-# )
-
-WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
-WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
-
-lc_llm = ChatWatsonx(
-    model_id="ibm/granite-3-3-8b-instruct",#"mistralai/mistral-large",# "ibm/granite-3-8b-instruct",
-    url = "https://us-south.ml.cloud.ibm.com",
-    apikey = WATSONX_APIKEY,
-    project_id = WATSONX_PROJECT_ID,
-    params = {
-        "decoding_method": "greedy",
-        "temperature": 0,
-        "min_new_tokens": 5,
-        "max_new_tokens": 100000
-    }
+# Initialize LLM
+lc_llm = AzureChatOpenAI(
+    model_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
+    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    deployment_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
+    openai_api_key=os.environ["AZURE_OPENAI_KEY"],
+    openai_api_version=os.environ["AZURE_OPENAI_VERSION"],
 )
+
+# WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
+# WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
+
+# lc_llm = ChatWatsonx(
+#     model_id="ibm/granite-3-8b-instruct",#"mistralai/mistral-large",# "ibm/granite-3-8b-instruct",
+#     url = "https://us-south.ml.cloud.ibm.com",
+#     apikey = WATSONX_APIKEY,
+#     project_id = WATSONX_PROJECT_ID,
+#     # params = {
+#     #     "decoding_method": "greedy",
+#     #     "temperature": 0,
+#     #     "min_new_tokens": 5,
+#     #     "max_new_tokens": 100000
+#     # }
+# )
 
 # Sidebar
 with st.sidebar:
@@ -121,6 +123,7 @@ def handle_manual_submit(message_text):
         st.session_state.transcriptions.append(human_msg)
         run_async_task()
 
+
 # Async query processor
 async def process_query():
     async with MultiServerMCPClient(
@@ -132,9 +135,11 @@ async def process_query():
             
         }
     ) as client:
-        
         tools = client.get_tools()
+        # lc_llm_tool = lc_llm.bind_tools(tools)
         agent = create_react_agent(lc_llm, tools)
+        # response = lc_llm_tool.invoke("create a graph called workflow")
+        # print(response)
 
         response = await agent.ainvoke({"messages": st.session_state.transcriptions})
         ai_message = response["messages"][-1]
@@ -300,11 +305,25 @@ def main():
 
             if audio_file:
                 try:
-                    result = st.session_state.model.transcribe(
-                        audio_file,
-                        fp16=False,
-                        language="en"
-                    )
+                    import requests
+
+                    with open(audio_file, "rb") as f:
+                        files = {"file": ("audio.wav", f, "audio/wav")}
+                        response = requests.post("http://localhost:8001/transcribe/", files=files)
+
+
+                    if response.status_code == 200:
+                        result = response.json()["text"]
+                    else:
+                        st.error(f"Transcription failed: {response.text}")
+                        result = ""
+
+                    result = {"text": result}
+                    # result = st.session_state.model.transcribe(
+                    #     audio_file,
+                    #     fp16=False,
+                    #     language="en"
+                    # )
 
                     if result["text"].strip():
                         new_text = result["text"]
