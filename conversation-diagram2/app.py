@@ -32,20 +32,24 @@ async def get_workflow_image():
         # Make sure this is a valid URI to a single image file!
         resource_uri = "file://graph_images"
         response = await client.read_resource(resource_uri)
+        # print(response)
         for content in response:
-            img_bytes = json.loads(content.text)[0]['bytes']
-            # convert this img_bytes in str into base64
-            img_bytes = base64.b64decode(img_bytes)
-            st.session_state.workflow_img = img_bytes
-            # st.image(img_bytes, caption="Graphviz Output", use_column_width=True)
-            # # return img_bytes
+            json_data = json.loads(content.text)
+            if len(json_data) > 0 and 'bytes' in json_data[0]:
+                # print(content.text)
+                img_bytes = json_data[0]['bytes']
+                # convert this img_bytes in str into base64
+                img_bytes = base64.b64decode(img_bytes)
+                st.session_state.workflow_img = img_bytes
+                # st.image(img_bytes, caption="Graphviz Output", use_column_width=True)
+                # # return img_bytes
 
 def get_image():
     asyncio.run(get_workflow_image())
     print("Image fetched successfully")
     st.rerun()
 
-# Initialize LLM
+# # Initialize LLM
 # lc_llm = AzureChatOpenAI(
 #     model_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
 #     azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
@@ -151,19 +155,20 @@ def main():
         st.session_state.transcriptions = [
             SystemMessage(
                 content=(
-                    """Welcome to the Graphviz Diagram Drawing Assistant!
-
-                        I will guide you through the process of creating a diagram step by step. Here's how it works:
-                        1. You will describe the diagram you want to create, including its purpose and key components.
-                        2. I will propose a plan for the diagram, including the blocks/nodes, connections, and layout.
-                        3. You will review and confirm the plan before we proceed.
-                        4. Render after each step to show progress, always use the tool and never show the images in chat.
-                        5. You are getting a live transcription of an audio stream, so take time and confirm before executing any tools
-                        6. Focus on the information that is pertinent to the diagram, and avoid unnecessary details.
-                        7. Users may also add a typed in message, use that to make necessary changes.
-
-                        Let's get started! Please describe the diagram you want to create.
                     """
+                    You are a Graphviz Diagram Drawing Assistant.
+
+                    You will receive input via a voice assistant or live transcription. Your duty is to use the tools to create a diagram that reflects the ongoing conversation.
+
+                    Follow these rules:
+
+                    1. Do not display images in the chat. Always call the render tool whenever changes are made.
+                    2. Focus strictly on information relevant to the diagram. Ignore unrelated or excessive detail.
+                    3. Wait for confirmation before rendering unless explicitly instructed to continue.
+
+                    Begin by listening for input or waiting for the first user message about the diagram.
+                    """
+
                 )
             )
         ]
