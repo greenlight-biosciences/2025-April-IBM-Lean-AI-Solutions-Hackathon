@@ -233,6 +233,7 @@ async def update_block(graph_name: str, block_name: str, shape: str = None, colo
 
     graph.node(block_name, **attributes)
     return f"Node '{block_name}' updated in graph '{graph_name}' with attributes: {attributes}."
+
 @mcp.tool()
 async def update_connection(graph_name: str, from_block: str, to_block: str, label: str = None, color: str = None, style: str = None, penwidth: str = None) -> str:
     """

@@ -9,6 +9,7 @@ from datetime import datetime
 import subprocess
 import sys
 import threading
+from langchain_ibm import ChatWatsonx
 import queue
 import base64
 import asyncio
@@ -45,12 +46,28 @@ def get_image():
     st.rerun()
 
 # Initialize LLM
-lc_llm = AzureChatOpenAI(
-    model_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-    deployment_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    openai_api_key=os.environ["AZURE_OPENAI_KEY"],
-    openai_api_version=os.environ["AZURE_OPENAI_VERSION"],
+# lc_llm = AzureChatOpenAI(
+#     model_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
+#     azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+#     deployment_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
+#     openai_api_key=os.environ["AZURE_OPENAI_KEY"],
+#     openai_api_version=os.environ["AZURE_OPENAI_VERSION"],
+# )
+
+WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
+WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
+
+lc_llm = ChatWatsonx(
+    model_id="ibm/granite-3-3-8b-instruct",#"mistralai/mistral-large",# "ibm/granite-3-8b-instruct",
+    url = "https://us-south.ml.cloud.ibm.com",
+    apikey = WATSONX_APIKEY,
+    project_id = WATSONX_PROJECT_ID,
+    params = {
+        "decoding_method": "greedy",
+        "temperature": 0,
+        "min_new_tokens": 5,
+        "max_new_tokens": 100000
+    }
 )
 
 # Sidebar
@@ -111,15 +128,6 @@ async def process_query():
             
         }
     ) as client:
-        # Make sure this is a valid URI to a single image file!
-        # try:
-        #     resource_uri = "file://graph_images"
-        #     response = await (client, resource_uri)
-        #     for content in response:
-        #         img_bytes = json.loads(content.text)[0]['bytes']
-        #         st.image(img_bytes, caption="Graphviz Output", use_column_width=True)
-        # except Exception as e:
-        #     st.error(f"Error fetching workflow image: {str(e)}")
         
         tools = client.get_tools()
         agent = create_react_agent(lc_llm, tools)
@@ -150,6 +158,9 @@ def main():
                         2. I will propose a plan for the diagram, including the blocks/nodes, connections, and layout.
                         3. You will review and confirm the plan before we proceed.
                         4. Render after each step to show progress, always use the tool and never show the images in chat.
+                        5. You are getting a live transcription of an audio stream, so take time and confirm before executing any tools
+                        6. Focus on the information that is pertinent to the diagram, and avoid unnecessary details.
+                        7. Users may also add a typed in message, use that to make necessary changes.
 
                         Let's get started! Please describe the diagram you want to create.
                     """
