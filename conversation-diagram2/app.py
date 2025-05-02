@@ -81,12 +81,21 @@ lc_llm = AzureChatOpenAI(
 with st.sidebar:
     st.title("Settings")
 
-    model_size = st.selectbox(
-        "Select Model Size",
-        ["tiny", "base", "small"],
-        index=0,
-        help="Smaller models are faster but less accurate"
-    )
+
+    if os.getenv("SPEECHMODELNAME", "").lower() == "whisper":
+        model_size = st.selectbox(
+            "Select Model Size",
+            ["tiny", "base", "small"],
+            index=0,
+            help="Smaller models are faster but less accurate"
+        )
+    else:
+        model_size = st.selectbox(
+            "Select Model Size",
+            ["granite-speech-3.3-8b"],
+            index=0,
+            help="IBM Granite Speech model for transcription"
+        )
 
     st.subheader("Recording Settings")
     chunk_duration = st.slider("Chunk Duration (seconds)", 1.0, 5.0, 3.0, 0.5)
@@ -168,9 +177,11 @@ def main():
 
                     Follow these rules:
 
-                    1. Do NOT display images with a link in the chat. Always leverage the render flag in tool calls to render a updated image after finishing running several tools so the user can see the graph development progress.
-                    2. Focus strictly on information relevant to the diagram. Ignore unrelated or excessive detail.
-                    3. Wait for confirmation before rendering unless explicitly instructed to continue.
+                    1. At the start of new conversation ALWAYS create a new diagram using the create new graph tool, render it so the user can see a blank canva -> use context clues to determine the best diagram layout and diagram name.
+                    2. Creatively leverage tool flags to stylize the graph block and connections.
+                    3. Do NOT display the graph images with a link in the chat. ALWAYS leverage the render flag in tool calls to render a updated image after finishing running several tools so the user can see the graph development progress.
+                    4. Focus strictly on information relevant to the diagram. Ignore unrelated or excessive detail.
+                    5. Wait for confirmation before rendering unless explicitly instructed to continue.
 
                     Begin by listening for input or waiting for the first user message about the diagram.
                     """
@@ -182,7 +193,11 @@ def main():
         st.session_state.is_recording = False
     if 'model' not in st.session_state or st.session_state.get('model_size') != model_size:
         st.session_state.model_size = model_size
-        st.session_state.model = whisper.load_model(model_size)
+        if os.getenv("SPEECHMODELNAME", "").lower() == "whisper":
+            st.session_state.model = whisper.load_model(model_size)
+        else:
+            # Load the IBM Granite model
+            st.session_state.model = None
     if 'last_transcription' not in st.session_state:
         st.session_state.last_transcription = ""
     if 'workflow_img' not in st.session_state:
