@@ -181,9 +181,7 @@ def main():
                     2. Creatively leverage tool flags to stylize the graph block and connections.
                     3. Do NOT display the graph images with a link in the chat. ALWAYS leverage the render flag in tool calls to render a updated image after finishing running several tools so the user can see the graph development progress.
                     4. Focus strictly on information relevant to the diagram. Ignore unrelated or excessive detail.
-                    5. Wait for confirmation before rendering unless explicitly instructed to continue.
-
-                    Begin by listening for input or waiting for the first user message about the diagram.
+                
                     """
 
                 )
