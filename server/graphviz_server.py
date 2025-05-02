@@ -15,7 +15,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import PromptTemplate
 from langchain.pydantic_v1 import BaseModel, Field
 import base64
-
+from datetime import datetime
 WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
 WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
 
@@ -35,12 +35,6 @@ vision_model = ChatWatsonx(
         "max_new_tokens": 100000
     }
 )
-# texts = [
-#     "mihir likes biking on yamaha FZS",
-# ]
-# documents = [Document(page_content=text) for text in texts]
-# db = FAISS.from_documents(documents, embedding_model)
-# db.save_local("faiss_db")
 
 # Load the FAISS vectorstore
 faiss_vector_store = FAISS.load_local("faiss_db", embedding_model, allow_dangerous_deserialization=True)
@@ -74,10 +68,14 @@ resource_registry  = {}
 
 @mcp.resource("file://graph_images")
 async def list_resources() -> list[dict]:
-    return [
-        {"uri": uri, "mimeType": entry["mimeType"], "filepath": entry["filepath"], "bytes": entry["bytes"]}
-        for uri, entry in resource_registry.items()
-    ]
+    return sorted(
+        [
+            {"uri": uri, "mimeType": entry["mimeType"], "filepath": entry["filepath"], "bytes": entry["bytes"], "created_at": entry["created_at"]}
+            for uri, entry in resource_registry.items()
+        ],
+        key=lambda x: x["created_at"],
+        reverse=True
+    )
 
 @mcp.tool()
 async def get_resource(uri: str) -> dict:
@@ -162,24 +160,27 @@ async def create_graphviz_graph(graph_name: str="workflow", rankdir: str = "TB",
     return f"Graph '{graph_name}' created successfully with rankdir='{rankdir}', bgcolor='{bgcolor}', fontname='{fontname}', and fontsize='{fontsize}'."
 
 @mcp.tool()
-async def add_block(graph_name: str, block_name: str, shape: str = "ellipse", color: str = "black", style: str = "solid") -> str:
+async def add_block(graph_name: str, block_name: str, shape: str = "ellipse", color: str = "black", style: str = "solid",re_render_graph:bool =True) -> str:
     """
-    Adds a styled block or node to the specified graph.
-    
+    Adds a styled block or node to the specified graph in memory.
+
     Args:
-        graph_name: The name of the graph to which the block will be added.
-        block_name: The name of the block to be added.
-        shape: The shape of the block (e.g., "ellipse", "box", "circle"). Defaults to "ellipse".
-        color: The color of the block. Defaults to "black".
-        style: The style of the block (e.g., "solid", "dashed", "dotted"). Defaults to "solid".
-    
+        graph_name (str): The name of the graph to which the block will be added.
+        block_name (str): The name of the block to be added.
+        shape (str, optional): The shape of the block (e.g., "ellipse", "box", "circle"). Defaults to "ellipse".
+        color (str, optional): The color of the block. Defaults to "black".
+        style (str, optional): The style of the block (e.g., "solid", "dashed", "dotted"). Defaults to "solid".
+        re_render_graph (bool, optional): Whether to re-render the graph after adding the block. Defaults to True.
+
     Returns:
-        A confirmation message.
+        str: A confirmation message indicating the block has been added.
     """
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
 
     graphs[graph_name].node(block_name, shape=shape, color=color, style=style)
+    if re_render_graph:
+        render_graph(graph_name)
     return f"Block '{block_name}' added to graph '{graph_name}' with shape '{shape}', color '{color}', and style '{style}'."
 
 @mcp.tool()
@@ -196,20 +197,21 @@ async def list_all_graph_in_memory() -> str:
     return ", ".join(graphs.keys())
 
 @mcp.tool()
-async def update_block(graph_name: str, block_name: str, shape: str = None, color: str = None, style: str = None, label: str = None) -> str:
+async def update_block(graph_name: str, block_name: str, shape: str = None, color: str = None, style: str = None, label: str = None, re_render_graph:bool =True) -> str:
     """
-    Updates the attributes of an existing node in the specified graph.
+    Updates the attributes of an existing block (node) in the specified graph.
 
     Args:
-        graph_name: The name of the graph containing the node.
-        block_name: The name of the node to update.
-        shape: The new shape of the node (optional).
-        color: The new color of the node (optional).
-        style: The new style of the node (optional).
-        label: The new label of the node (optional).
+        graph_name (str): The name of the graph containing the block.
+        block_name (str): The name of the block to update.
+        shape (str, optional): The new shape of the block (e.g., "ellipse", "box"). Defaults to None.
+        color (str, optional): The new color of the block. Defaults to None.
+        style (str, optional): The new style of the block (e.g., "solid", "dashed"). Defaults to None.
+        label (str, optional): The new label of the block. Defaults to None.
+        re_render_graph (bool, optional): Whether to re-render the graph after updating the block. Defaults to True.
 
     Returns:
-        A confirmation message.
+        str: A confirmation message indicating the block has been updated.
     """
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
@@ -232,24 +234,27 @@ async def update_block(graph_name: str, block_name: str, shape: str = None, colo
         attributes["label"] = label
 
     graph.node(block_name, **attributes)
+    if re_render_graph:
+        render_graph(graph_name)
     return f"Node '{block_name}' updated in graph '{graph_name}' with attributes: {attributes}."
 
 @mcp.tool()
-async def update_connection(graph_name: str, from_block: str, to_block: str, label: str = None, color: str = None, style: str = None, penwidth: str = None) -> str:
+async def update_connection(graph_name: str, from_block: str, to_block: str, label: str = None, color: str = None, style: str = None, penwidth: str = None,re_render_graph:bool =True) -> str:
     """
     Updates the attributes of an existing connection in the specified graph.
 
     Args:
-        graph_name: The name of the graph containing the connection.
-        from_block: The starting block of the connection.
-        to_block: The ending block of the connection.
-        label: The new label for the connection (optional).
-        color: The new color of the connection (optional).
-        style: The new style of the connection (e.g., "solid", "dashed", "dotted") (optional).
-        penwidth: The new width of the connection line (optional).
+        graph_name (str): The name of the graph containing the connection.
+        from_block (str): The starting block of the connection.
+        to_block (str): The ending block of the connection.
+        label (str, optional): The new label for the connection.
+        color (str, optional): The new color of the connection.
+        style (str, optional): The new style of the connection (e.g., "solid", "dashed", "dotted").
+        penwidth (str, optional): The new width of the connection line.
+        re_render_graph (bool, optional): Whether to re-render the graph after updating the connection. Defaults to True.
 
     Returns:
-        A confirmation message.
+        str: A confirmation message indicating the connection has been updated.
     """
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
@@ -285,25 +290,27 @@ async def update_connection(graph_name: str, from_block: str, to_block: str, lab
 
     new_graph.edge(from_block, to_block, **connection_attributes)
     graphs[graph_name] = new_graph
-
+    if re_render_graph:
+        render_graph(graph_name)
     return f"Connection from '{from_block}' to '{to_block}' updated in graph '{graph_name}' with attributes: {connection_attributes}."
 
 @mcp.tool()
-def add_connection(graph_name: str, from_block: str, to_block: str, label: str = None, color: str = "black", style: str = "solid", penwidth: str = "1") -> str:
+def add_connection(graph_name: str, from_block: str, to_block: str, label: str = None, color: str = "black", style: str = "solid", penwidth: str = "1",re_render_graph:bool =True) -> str:
     """
-    Adds a styled connection between two blocks in the specified graph, with an optional label.
-    
+    Adds a styled connection (edge) between two blocks (nodes) in the specified graph, with optional attributes.
+
     Args:
-        graph_name: The name of the graph.
-        from_block: The starting block of the connection.
-        to_block: The ending block of the connection.
-        label: The label for the connection (optional).
-        color: The color of the connection. Defaults to "black".
-        style: The style of the connection (e.g., "solid", "dashed", "dotted"). Defaults to "solid".
-        penwidth: The width of the connection line. Defaults to "1".
-    
+        graph_name (str): The name of the graph where the connection will be added.
+        from_block (str): The name of the starting block (source node) of the connection.
+        to_block (str): The name of the ending block (target node) of the connection.
+        label (str, optional): The label for the connection. Defaults to None.
+        color (str, optional): The color of the connection. Defaults to "black".
+        style (str, optional): The style of the connection (e.g., "solid", "dashed", "dotted"). Defaults to "solid".
+        penwidth (str, optional): The width of the connection line. Defaults to "1".
+        re_render_graph (bool, optional): Whether to re-render the graph after adding the connection. Defaults to True.
+
     Returns:
-        A confirmation message.
+        str: A confirmation message indicating the connection has been added, along with its attributes.
     """
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
@@ -312,12 +319,23 @@ def add_connection(graph_name: str, from_block: str, to_block: str, label: str =
         graphs[graph_name].edge(from_block, to_block, label=label, color=color, style=style, penwidth=penwidth)
     else:
         graphs[graph_name].edge(from_block, to_block, color=color, style=style, penwidth=penwidth)
-    
+    if re_render_graph:
+        render_graph(graph_name)
     return f"Connection from '{from_block}' to '{to_block}' added in graph '{graph_name}' with label '{label}', color '{color}', style '{style}', and penwidth '{penwidth}'." if label else f"Connection from '{from_block}' to '{to_block}' added in graph '{graph_name}' with color '{color}', style '{style}', and penwidth '{penwidth}'."
 
 @mcp.tool()
-def delete_block(graph_name: str, block_name: str) -> str:
-    """Delete a block and its edges from the graph."""
+def delete_block(graph_name: str, block_name: str, re_render_graph:bool =True) -> str:
+    """
+    Deletes a block and all its associated edges from the specified graph.
+
+    Args:
+        graph_name: The name of the graph from which the block will be deleted.
+        block_name: The name of the block to delete.
+        re_render_graph: A boolean flag indicating whether to re-render the graph after deletion. Defaults to True.
+
+    Returns:
+        A confirmation message indicating the block and its edges have been deleted.
+    """
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
 
@@ -336,6 +354,8 @@ def delete_block(graph_name: str, block_name: str) -> str:
         new_graph.body.append(line)
     print(f"Deleted block {block_name}", file=sys.stderr)
     graphs[graph_name] = new_graph
+    if re_render_graph:
+        render_graph(graph_name)
     return f"Block '{block_name}' and its edges deleted from graph '{graph_name}'."
 
 @mcp.tool()
@@ -370,7 +390,8 @@ def render_graph(graph_name: str) -> str:
         "filepath": output_path,
         "mimeType": "image/png",
         "bytes": base64.b64encode(image_bytes).decode('utf-8'),
-    }    
+        "created_at": datetime.now().isoformat()
+    }
 
     return f"Graph '{graph_name}' rendered successfully. Check the output at {resource_uri}"
 
@@ -653,7 +674,6 @@ if __name__ == "__main__":
     print("Starting Graphviz server...")
     mcp.run(transport="sse")
 
-# TODO: Add a reder flag to allow the user to render the graph and return the image bytes directly. at the end of any tool call
 # TODO: Add subgraphs   
 # TODO: Multi user management 
 # TODO: Good system prompt for the overall process 
