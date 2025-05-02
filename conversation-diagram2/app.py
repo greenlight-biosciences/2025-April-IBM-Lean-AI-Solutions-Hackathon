@@ -24,13 +24,14 @@ from langgraph.prebuilt import create_react_agent
 from AudioRecorder import AudioRecorder, check_ffmpeg, save_audio_chunk, create_workflow_image
 from fastmcp import Client
 from dotenv import load_dotenv
+import requests
 load_dotenv()
 st.set_page_config(layout="wide")
 
 async def get_workflow_image():
     """Fetch a workflow image from an MCP resource with retries and logging"""
 
-    async with Client("http://localhost:8000/sse") as client:
+    async with Client(os.getenv("MCPSSEURL", "http://localhost:8006/sse")) as client:
         # Make sure this is a valid URI to a single image file!
         resource_uri = "file://graph_images"
         response = await client.read_resource(resource_uri)
@@ -129,7 +130,7 @@ async def process_query():
     async with MultiServerMCPClient(
         {
             "Graphviz": {
-                "url": "http://localhost:8000/sse",
+                "url": os.getenv("MCPSSEURL", "http://localhost:8006/sse"),
                 "transport": "sse",
             },
             
@@ -167,7 +168,7 @@ def main():
 
                     Follow these rules:
 
-                    1. Do not display images in the chat. Always call the render tool whenever changes are made.
+                    1. Do NOT display images with a link in the chat. Always leverage the render flag in tool calls to render a updated image after finishing running several tools so the user can see the graph development progress.
                     2. Focus strictly on information relevant to the diagram. Ignore unrelated or excessive detail.
                     3. Wait for confirmation before rendering unless explicitly instructed to continue.
 
@@ -305,11 +306,12 @@ def main():
 
             if audio_file:
                 try:
-                    import requests
+                    
 
                     with open(audio_file, "rb") as f:
                         files = {"file": ("audio.wav", f, "audio/wav")}
-                        response = requests.post("http://localhost:8001/transcribe/", files=files)
+                        headers = {"x-api-key": os.getenv("SPEECHAPIKEY", "")}
+                        response = requests.post(os.getenv("SPEECHAPIURL", "http://localhost:8000/transcribe/"), files=files, headers=headers)
 
 
                     if response.status_code == 200:

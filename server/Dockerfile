@@ -36,12 +36,14 @@ RUN pip install --no-cache-dir --upgrade setuptools wheel
 # 3) Copy & install Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
+RUN pip install langchain langchain_ibm langchain_community
+RUN pip install sentence-transformers
+RUN pip install faiss-cpu
 # 4) Copy your application code
 COPY . .
 
 # Install pytest for testing
-RUN pip install --no-cache-dir pytest
+# RUN pip install --no-cache-dir pytest
 
 # Run tests during the build process
 # RUN pytest
