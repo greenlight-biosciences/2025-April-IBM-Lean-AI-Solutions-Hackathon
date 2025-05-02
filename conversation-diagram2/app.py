@@ -31,7 +31,7 @@ st.set_page_config(layout="wide")
 async def get_workflow_image():
     """Fetch a workflow image from an MCP resource with retries and logging"""
 
-    async with Client("http://localhost:8000/sse") as client:
+    async with Client(os.getenv("MCPSSEURL", "http://localhost:8006/sse")) as client:
         # Make sure this is a valid URI to a single image file!
         resource_uri = "file://graph_images"
         response = await client.read_resource(resource_uri)
@@ -130,7 +130,7 @@ async def process_query():
     async with MultiServerMCPClient(
         {
             "Graphviz": {
-                "url": "http://localhost:8000/sse",
+                "url": os.getenv("MCPSSEURL", "http://localhost:8006/sse"),
                 "transport": "sse",
             },
             
@@ -168,7 +168,7 @@ def main():
 
                     Follow these rules:
 
-                    1. Do not display images in the chat. Always call the render tool whenever changes are made.
+                    1. Do NOT display images with a link in the chat. Always leverage the render flag in tool calls to render a updated image after finishing running several tools so the user can see the graph development progress.
                     2. Focus strictly on information relevant to the diagram. Ignore unrelated or excessive detail.
                     3. Wait for confirmation before rendering unless explicitly instructed to continue.
 
