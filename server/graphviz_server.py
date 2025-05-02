@@ -159,6 +159,7 @@ async def create_graphviz_graph(graph_name: str="workflow", rankdir: str = "TB",
     graph = graphviz.Digraph(name=graph_name)
     graph.attr(rankdir=rankdir, bgcolor=bgcolor, fontname=fontname, fontsize=fontsize)
     graphs[graph_name] = graph
+    print(f"Created graph {graph_name}", file=sys.stderr)
     return f"Graph '{graph_name}' created successfully with rankdir='{rankdir}', bgcolor='{bgcolor}', fontname='{fontname}', and fontsize='{fontsize}'."
 
 @mcp.tool()
@@ -180,6 +181,7 @@ async def add_block(graph_name: str, block_name: str, shape: str = "ellipse", co
         return f"Graph '{graph_name}' does not exist."
 
     graphs[graph_name].node(block_name, shape=shape, color=color, style=style)
+    print(f"Added block {block_name} to graph {graph_name}", file=sys.stderr)
     return f"Block '{block_name}' added to graph '{graph_name}' with shape '{shape}', color '{color}', and style '{style}'."
 
 @mcp.tool()
@@ -192,7 +194,7 @@ async def list_all_graph_in_memory() -> str:
     """
     if not graphs:
         return "No graphs available."
-
+    print(f"Graphs in memory: {list(graphs.keys())}", file=sys.stderr)
     return ", ".join(graphs.keys())
 
 @mcp.tool()
@@ -232,6 +234,7 @@ async def update_block(graph_name: str, block_name: str, shape: str = None, colo
         attributes["label"] = label
 
     graph.node(block_name, **attributes)
+    print(f"Updated block {block_name} in graph {graph_name}", file=sys.stderr)
     return f"Node '{block_name}' updated in graph '{graph_name}' with attributes: {attributes}."
 
 @mcp.tool()
@@ -285,7 +288,7 @@ async def update_connection(graph_name: str, from_block: str, to_block: str, lab
 
     new_graph.edge(from_block, to_block, **connection_attributes)
     graphs[graph_name] = new_graph
-
+    print(f"Updated connection from {from_block} to {to_block} in graph {graph_name}", file=sys.stderr)
     return f"Connection from '{from_block}' to '{to_block}' updated in graph '{graph_name}' with attributes: {connection_attributes}."
 
 @mcp.tool()
@@ -312,7 +315,7 @@ def add_connection(graph_name: str, from_block: str, to_block: str, label: str =
         graphs[graph_name].edge(from_block, to_block, label=label, color=color, style=style, penwidth=penwidth)
     else:
         graphs[graph_name].edge(from_block, to_block, color=color, style=style, penwidth=penwidth)
-    
+    print(f"Added connection from {from_block} to {to_block} in graph {graph_name}", file=sys.stderr)
     return f"Connection from '{from_block}' to '{to_block}' added in graph '{graph_name}' with label '{label}', color '{color}', style '{style}', and penwidth '{penwidth}'." if label else f"Connection from '{from_block}' to '{to_block}' added in graph '{graph_name}' with color '{color}', style '{style}', and penwidth '{penwidth}'."
 
 @mcp.tool()
@@ -336,6 +339,7 @@ def delete_block(graph_name: str, block_name: str) -> str:
         new_graph.body.append(line)
     print(f"Deleted block {block_name}", file=sys.stderr)
     graphs[graph_name] = new_graph
+    print(f"Block '{block_name}' and its edges deleted from graph '{graph_name}'", file=sys.stderr)
     return f"Block '{block_name}' and its edges deleted from graph '{graph_name}'."
 
 @mcp.tool()
@@ -361,17 +365,12 @@ def render_graph(graph_name: str) -> str:
 
     # Store the image bytes in the resource registry
     resource_uri = f"file://graph_images/{output_path}"
-    # resource_registry[resource_uri] = {
-    #     "filepath": output_path,
-    #     "mimeType": "image/png",
-    #     "bytes": base64 # image_bytes,
-    # }
     resource_registry[resource_uri] = {
         "filepath": output_path,
         "mimeType": "image/png",
         "bytes": base64.b64encode(image_bytes).decode('utf-8'),
     }    
-
+    print(f"Rendered graph {graph_name} to {output_path}", file=sys.stderr)
     return f"Graph '{graph_name}' rendered successfully. Check the output at {resource_uri}"
 
 @mcp.tool()
@@ -406,7 +405,7 @@ def set_layout(graph_name: str, layout: str = "dot") -> str:
         return f"Graph '{graph_name}' does not exist."
 
     graphs[graph_name].engine = layout
-    
+    print(f"Set layout for graph {graph_name} to {layout}", file=sys.stderr)
     return f"Layout for graph '{graph_name}' set to '{layout}'."
 
 @mcp.tool()
@@ -439,7 +438,7 @@ async def label_diagram(graph_name: str, title: str, ctx: Context, position: str
         graphs[graph_name].attr(label=title, labelloc="l")
     elif position == "right":
         graphs[graph_name].attr(label=title, labelloc="r")
-
+    print(f"Added label '{title}' to graph '{graph_name}' at position '{position}'", file=sys.stderr)
     await ctx.info(f"Label '{title}' added to graph '{graph_name}' at position '{position}'.")
     return f"Label '{title}' added to graph '{graph_name}' at position '{position}'."
 
@@ -490,7 +489,7 @@ async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Co
     # Check if the block exists in the graph
     if block_name not in graph.body:
         return f"Block '{block_name}' does not exist in graph '{graph_name}'."
-
+    print(f"Searching for icon '{search_query}' in graph '{graph_name}' for block '{block_name}'", file=sys.stderr)
     try:
         # Generate an icon image using TkFontAwesome
         icon_image = icon_to_image(search_query, size=size, color=color)
@@ -605,6 +604,7 @@ async def query_existing_diagrams(query: str, ctx: Context) -> str:
     results = faiss_vector_store.similarity_search(query, k=5)
     
     # Log the results
+    print(f"RAG results for query '{query}': {results}", file=sys.stderr)
     await ctx.info(f"RAG results for query '{query}': {results}")
     
     return f"RAG results for query '{query}': {results}"
@@ -646,6 +646,7 @@ async def describe_graph_from_resource(resource_uri: str, ctx: Context) -> str:
     # Store the description in the FAISS vectorstore
     document = Document(page_content=description)
     faiss_vector_store.add_documents([document])
+    print(f"Description for resource '{resource_uri}': {description}", file=sys.stderr)
     await ctx.info(f"Description for resource '{resource_uri}': {description}")
     return f"Description for resource '{resource_uri}' generated and stored in vectorstore: {description}"
 
