@@ -534,7 +534,7 @@ async def label_diagram(graph_name: str, title: str, ctx: Context, position: str
 #     return Image(data=entry["bytes"], format="png")
 
 @mcp.tool()
-async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Context, color: str = "black", size: int = 64) -> str:
+async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Context) -> str:
     """
     Searches for an icon in the TkFontAwesome library and assigns it to a specific block in the specified graph.
 
@@ -561,7 +561,7 @@ async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Co
             return f"Block '{block_name}' does not exist in graph '{graph_name}'."
 
         # Generate an icon image using TkFontAwesome
-        icon_image = icon_to_image(search_query, size=size, color=color)
+        icon_image = icon_to_image(search_query)
         if icon_image is None:
             return f"No icon found for query '{search_query}'."
 
@@ -573,8 +573,8 @@ async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Co
         # Apply the icon to the block
         graph.node(block_name, image=tmp_file_path, shape="none", label="")
 
-        await ctx.info(f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'.")
-        return f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'."
+        await ctx.info(f"Icon applied to block '{block_name}' in graph '{graph_name}'.")
+        return f"Icon applied to block '{block_name}' in graph '{graph_name}'."
 
     except Exception as e:
         print(f"Error while searching for icon: {str(e)}", file=sys.stderr)
