@@ -16,6 +16,7 @@ from langchain.prompts import PromptTemplate
 from langchain.pydantic_v1 import BaseModel, Field
 import base64
 from datetime import datetime
+import tempfile
 WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
 WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
 
@@ -65,6 +66,49 @@ vision_system_prompt = PromptTemplate(
 # In-memory store for graphs
 graphs = {}
 resource_registry  = {}
+
+def store_the_completed_graph(resource_uri: str) -> str:
+    """
+    Generates a description of the graph from the specified resource URI using the IBM Vision Granite model
+    and stores the description in the FAISS vectorstore.
+
+    Args:
+        resource_uri: The URI of the resource to describe.
+        ctx: The context object for logging and information.
+
+    Returns:
+        A confirmation message with the generated description.
+    """
+    entry = resource_registry.get(resource_uri)
+    if not entry:
+        raise Exception("Resource not found")
+
+    # Read the image bytes from the resource
+    image_bytes = entry["bytes"]
+
+    print(f"describing the graph...", file=sys.stderr)
+    try:
+        messages = [
+            {"role": "system", "content": vision_system_prompt.format()},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_bytes}"}},
+                ]
+            }
+        ]
+        response = vision_model.invoke(messages)
+        description_dict = parser.parse(response.content)
+        # Serialize the entire JSON to a string
+        description = json.dumps(description_dict, indent=2)
+        # Store the description in the FAISS vectorstore
+        document = Document(page_content=description)
+        faiss_vector_store.add_documents([document])
+        print(f"Description for resource '{resource_uri}': {description}", file=sys.stderr)
+    except Exception as e:
+        print(f"Error while describing the graph: {str(e)}", file=sys.stderr)
+    # await ctx.info(f"Description for resource '{resource_uri}': {description}")
+    return f"Description for resource '{resource_uri}' generated and stored in vectorstore: {description}"
 
 @mcp.resource("file://graph_images")
 async def list_resources() -> list[dict]:
@@ -393,7 +437,8 @@ def render_graph(graph_name: str) -> str:
         "bytes": base64.b64encode(image_bytes).decode('utf-8'),
         "created_at": datetime.now().isoformat()
     }
-
+    store_the_completed_graph(resource_uri)
+    print(f"Rendered graph '{graph_name}' to {output_path}", file=sys.stderr)
     return f"Graph '{graph_name}' rendered successfully. Check the output at {resource_uri}"
 
 @mcp.tool()
@@ -503,32 +548,81 @@ async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Co
     Returns:
         A confirmation message.
     """
+    print(f"Searching for icon '{search_query}' in graph '{graph_name}' for block '{block_name}'", file=sys.stderr)
 
     if graph_name not in graphs:
         return f"Graph '{graph_name}' does not exist."
 
     graph = graphs[graph_name]
 
-    # Check if the block exists in the graph
-    if block_name not in graph.body:
-        return f"Block '{block_name}' does not exist in graph '{graph_name}'."
-    print(f"Searching for icon '{search_query}' in graph '{graph_name}' for block '{block_name}'", file=sys.stderr)
     try:
+        # Check if the block name appears in any line of the graph body (approximate check)
+        if not any(block_name in line for line in graph.body):
+            return f"Block '{block_name}' does not exist in graph '{graph_name}'."
+
         # Generate an icon image using TkFontAwesome
         icon_image = icon_to_image(search_query, size=size, color=color)
+        if icon_image is None:
+            return f"No icon found for query '{search_query}'."
 
         # Save the icon to a temporary file
-        buffer = io.BytesIO()
-        icon_image.save(buffer, format="PNG")
-        buffer.seek(0)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            icon_image.save(tmp_file, format="PNG")
+            tmp_file_path = tmp_file.name
 
         # Apply the icon to the block
-        graph.node(block_name, image=buffer, shape="none", label="")
+        graph.node(block_name, image=tmp_file_path, shape="none", label="")
+
         await ctx.info(f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'.")
         return f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'."
 
     except Exception as e:
+        print(f"Error while searching for icon: {str(e)}", file=sys.stderr)
         return f"Error while searching for icon: {str(e)}"
+
+
+# @mcp.tool()
+# async def find_icon(graph_name: str, block_name: str, search_query: str, ctx: Context, color: str = "black", size: int = 64) -> str:
+#     """
+#     Searches for an icon in the TkFontAwesome library and assigns it to a specific block in the specified graph.
+
+#     Args:
+#         graph_name: The name of the graph containing the block.
+#         block_name: The name of the block to which the icon will be applied.
+#         search_query: The search query to find the icon.
+#         color: The color of the icon. Defaults to "black".
+#         size: The size of the icon. Defaults to 64.
+
+#     Returns:
+#         A confirmation message.
+#     """
+#     print(f"Searching for icon '{search_query}' in graph '{graph_name}' for block '{block_name}'", file=sys.stderr)
+
+#     if graph_name not in graphs:
+#         return f"Graph '{graph_name}' does not exist."
+
+#     graph = graphs[graph_name]
+
+#     try:
+#         # Check if the block exists in the graph
+#         if block_name not in graph.body:
+#             return f"Block '{block_name}' does not exist in graph '{graph_name}'."
+#         # Generate an icon image using TkFontAwesome
+#         icon_image = icon_to_image(search_query, size=size, color=color)
+
+#         # Save the icon to a temporary file
+#         buffer = io.BytesIO()
+#         icon_image.save(buffer, format="PNG")
+#         buffer.seek(0)
+
+#         # Apply the icon to the block
+#         graph.node(block_name, image=buffer, shape="none", label="")
+#         await ctx.info(f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'.")
+#         return f"Icon applied to block '{block_name}' in graph '{graph_name}' with color '{color}' and size '{size}'."
+
+#     except Exception as e:
+#         print(f"Error while searching for icon: {str(e)}", file=sys.stderr)
+#         return f"Error while searching for icon: {str(e)}"
     
 # @mcp.tool()
 # async def set_graph_theme(graph_name: str, theme: str, ctx: Context, custom_theme: dict = None) -> str:
@@ -631,47 +725,6 @@ async def query_existing_diagrams(query: str, ctx: Context) -> str:
     await ctx.info(f"RAG results for query '{query}': {results}")
     
     return f"RAG results for query '{query}': {results}"
-
-@mcp.tool()
-async def describe_graph_from_resource(resource_uri: str, ctx: Context) -> str:
-    """
-    Generates a description of the graph from the specified resource URI using the IBM Vision Granite model
-    and stores the description in the FAISS vectorstore.
-
-    Args:
-        resource_uri: The URI of the resource to describe.
-        ctx: The context object for logging and information.
-
-    Returns:
-        A confirmation message with the generated description.
-    """
-    entry = resource_registry.get(resource_uri)
-    if not entry:
-        raise Exception("Resource not found")
-
-    # Read the image bytes from the resource
-    image_bytes = entry["bytes"]
-
-    print(f"describing the graph...", file=sys.stderr)
-    messages = [
-        {"role": "system", "content": vision_system_prompt.format()},
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64.b64encode(image_bytes).decode('utf-8')}"}},
-            ]
-        }
-    ]
-    response = vision_model.invoke(messages)
-    description_dict = parser.parse(response.content)
-    # Serialize the entire JSON to a string
-    description = json.dumps(description_dict, indent=2)
-    # Store the description in the FAISS vectorstore
-    document = Document(page_content=description)
-    faiss_vector_store.add_documents([document])
-    print(f"Description for resource '{resource_uri}': {description}", file=sys.stderr)
-    await ctx.info(f"Description for resource '{resource_uri}': {description}")
-    return f"Description for resource '{resource_uri}' generated and stored in vectorstore: {description}"
 
 if __name__ == "__main__":
     print("Starting Graphviz server...")
