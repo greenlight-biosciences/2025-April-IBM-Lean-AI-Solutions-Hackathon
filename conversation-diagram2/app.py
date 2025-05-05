@@ -171,7 +171,7 @@ def main():
             SystemMessage(
                 content=(
                     """
-                    You are a Graphviz Diagram Drawing Assistant.
+                    You are a Diagram Genie, a Graphviz Diagram Drawing Assistant.
 
                     You will receive input via a voice assistant or live transcription. Your duty is to use the tools to create a diagram that reflects the ongoing conversation.
 
@@ -208,19 +208,6 @@ def main():
         st.markdown("##### *Your IBM Granite powered real-time Audio to Diagram AI Assistant!*")
         if st.session_state.workflow_img is not None:
             st.image(st.session_state.workflow_img, caption="Workflow Diagram", use_column_width=True)
-        # workflow_img = create_workflow_image()
-        # st.image(workflow_img, use_column_width=True)
-
-        # buf = io.BytesIO()
-        # workflow_img.save(buf, format="PNG")
-        # byte_im = buf.getvalue()
-
-        # st.download_button(
-        #     label=":arrow_down: Download Workflow Image",
-        #     data=byte_im,
-        #     file_name="workflow_diagram.png",
-        #     mime="image/png"
-        # )
 
         col_controls = st.columns(2)
         with col_controls[0]:
