@@ -15,7 +15,6 @@ import base64
 import asyncio
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.resources import load_mcp_resources
-from langchain_openai import AzureChatOpenAI
 import time
 from PIL import Image
 import io, json
@@ -52,30 +51,21 @@ def get_image():
     print("Image fetched successfully")
     st.rerun()
 
-# Initialize LLM
-lc_llm = AzureChatOpenAI(
-    model_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-    deployment_name=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    openai_api_key=os.environ["AZURE_OPENAI_KEY"],
-    openai_api_version=os.environ["AZURE_OPENAI_VERSION"],
+WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
+WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
+
+lc_llm = ChatWatsonx(
+    model_id="mistralai/mistral-large",
+    url = "https://us-south.ml.cloud.ibm.com",
+    apikey = WATSONX_APIKEY,
+    project_id = WATSONX_PROJECT_ID,
+    # params = {
+    #     "decoding_method": "greedy",
+    #     "temperature": 0,
+    #     "min_new_tokens": 5,
+    #     "max_new_tokens": 100000
+    # }
 )
-
-# WATSONX_APIKEY = os.getenv('WATSONX_APIKEY', "")
-# WATSONX_PROJECT_ID = os.getenv('WATSONX_PROJECT_ID', "")
-
-# lc_llm = ChatWatsonx(
-#     model_id="ibm/granite-3-8b-instruct",#"mistralai/mistral-large",# "ibm/granite-3-8b-instruct",
-#     url = "https://us-south.ml.cloud.ibm.com",
-#     apikey = WATSONX_APIKEY,
-#     project_id = WATSONX_PROJECT_ID,
-#     # params = {
-#     #     "decoding_method": "greedy",
-#     #     "temperature": 0,
-#     #     "min_new_tokens": 5,
-#     #     "max_new_tokens": 100000
-#     # }
-# )
 
 # Sidebar
 with st.sidebar:
