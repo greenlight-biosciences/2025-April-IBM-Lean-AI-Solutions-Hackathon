@@ -9,10 +9,22 @@ To develop these groundbreaking products, our team designs and executes experime
 To address this challenge, we introduce **DiagramGenie**, a GenAI application powered by IBM Granite models. DiagramGenie generates visual workflows in real time based on speech input, streamlining collaboration and making work more engaging.
 
 ## How to run?
+### Start GraphVis MCP Server
+```cd GraphVisMCPServer```
 
+```python3 graphvis_mcp_server.py```
+
+### Start DiagramGenie
+```cd DiagramGenie```
+
+```streamlit run app.py```
 
 ## DiagramGenie System Architecture
 ![System Architecture](system_architecture.png)
 
+
 ## DiagramGenie-in-Action
 https://www.youtube.com/watch?v=UN8kv2V0Hbs
+
+## Example Output
+![Example](example.png)
