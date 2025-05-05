@@ -204,8 +204,8 @@ def main():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.title("Real-time Audio Transcription")
-        st.subheader("Workflow")
+        st.title("Diagram Genie")
+        st.markdown("##### *Your IBM Granite powered real-time Audio to Diagram AI Assistant!*")
         if st.session_state.workflow_img is not None:
             st.image(st.session_state.workflow_img, caption="Workflow Diagram", use_column_width=True)
         # workflow_img = create_workflow_image()
